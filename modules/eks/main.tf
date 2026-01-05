@@ -1,0 +1,319 @@
+# Get current AWS region
+data "aws_region" "current" {}
+
+# =============================================================================
+# EKS (native resources)
+# =============================================================================
+
+# Cluster IAM role
+data "aws_iam_policy_document" "eks_cluster_assume_role" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["eks.amazonaws.com"]
+    }
+
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+resource "aws_iam_role" "eks_cluster" {
+  name               = "${var.cluster_name}-eks-cluster-role"
+  assume_role_policy = data.aws_iam_policy_document.eks_cluster_assume_role.json
+  tags               = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
+  role       = aws_iam_role.eks_cluster.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+}
+
+# Node IAM role
+data "aws_iam_policy_document" "eks_nodes_assume_role" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+resource "aws_iam_role" "eks_nodes" {
+  name               = "${var.cluster_name}-eks-nodes-role"
+  assume_role_policy = data.aws_iam_policy_document.eks_nodes_assume_role.json
+  tags               = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "eks_nodes_worker" {
+  role       = aws_iam_role.eks_nodes.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+}
+
+resource "aws_iam_role_policy_attachment" "eks_nodes_cni" {
+  role       = aws_iam_role.eks_nodes.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+}
+
+resource "aws_iam_role_policy_attachment" "eks_nodes_ecr" {
+  role       = aws_iam_role.eks_nodes.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+# EKS control plane
+resource "aws_eks_cluster" "this" {
+  name     = var.cluster_name
+  version  = var.cluster_version
+  role_arn = aws_iam_role.eks_cluster.arn
+
+  vpc_config {
+    subnet_ids              = var.subnet_ids
+    endpoint_public_access  = var.endpoint_public_access
+    endpoint_private_access = true
+    # Restrict public endpoint access to specific CIDRs (optional but recommended for security)
+    public_access_cidrs = var.public_access_cidrs
+  }
+
+  # Enable control plane logging for audit and troubleshooting
+  enabled_cluster_log_types = var.enabled_cluster_log_types
+
+  tags = var.tags
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_cluster_policy,
+  ]
+}
+
+# Managed node group
+resource "aws_eks_node_group" "default" {
+  cluster_name    = aws_eks_cluster.this.name
+  node_group_name = "${var.cluster_name}-default"
+  node_role_arn   = aws_iam_role.eks_nodes.arn
+  subnet_ids      = var.node_subnet_ids != null ? var.node_subnet_ids : var.subnet_ids
+
+  instance_types = var.node_instance_types
+
+  # Disk size configuration
+  disk_size = var.node_disk_size
+
+  scaling_config {
+    desired_size = var.node_desired_size
+    min_size     = var.node_min_size
+    max_size     = var.node_max_size
+  }
+
+  # Update configuration for rolling updates
+  update_config {
+    max_unavailable = var.node_update_max_unavailable
+  }
+
+  # Remote access configuration (SSH access control)
+  dynamic "remote_access" {
+    for_each = var.node_remote_access_enabled ? [1] : []
+    content {
+      ec2_ssh_key               = var.node_remote_access_ssh_key
+      source_security_group_ids = var.node_remote_access_security_groups
+    }
+  }
+
+  # Node labels (taints should be applied via Kubernetes, not at node group level)
+  labels = var.node_labels
+
+  tags = var.tags
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_nodes_worker,
+    aws_iam_role_policy_attachment.eks_nodes_cni,
+    aws_iam_role_policy_attachment.eks_nodes_ecr,
+  ]
+}
+
+# =============================================================================
+# AWS Load Balancer Controller IAM (IRSA setup)
+# Note: Kubernetes resources are created at root level to avoid provider cycles
+# =============================================================================
+
+# OIDC provider for IRSA
+data "tls_certificate" "eks" {
+  url = aws_eks_cluster.this.identity[0].oidc[0].issuer
+}
+
+resource "aws_iam_openid_connect_provider" "eks" {
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
+  url             = aws_eks_cluster.this.identity[0].oidc[0].issuer
+
+  tags = var.tags
+}
+
+# IAM role for AWS Load Balancer Controller
+data "aws_iam_policy_document" "aws_lb_controller_assume_role" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+    }
+
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:aws-load-balancer-controller"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "aws_lb_controller" {
+  name               = "${var.cluster_name}-aws-lb-controller"
+  assume_role_policy = data.aws_iam_policy_document.aws_lb_controller_assume_role.json
+  tags               = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "aws_lb_controller" {
+  role       = aws_iam_role.aws_lb_controller.name
+  policy_arn = "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "aws_lb_controller_ec2" {
+  role       = aws_iam_role.aws_lb_controller.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+}
+
+resource "aws_iam_role_policy" "aws_lb_controller_waf" {
+  name = "${var.cluster_name}-aws-lb-controller-waf"
+  role = aws_iam_role.aws_lb_controller.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "WAFv2Permissions"
+        Effect = "Allow"
+        Action = [
+          "wafv2:GetWebACL",
+          "wafv2:GetWebACLForResource",
+          "wafv2:AssociateWebACL",
+          "wafv2:DisassociateWebACL",
+          "wafv2:ListWebACLs"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "WAFRegionalPermissions"
+        Effect = "Allow"
+        Action = [
+          "waf-regional:GetWebACL",
+          "waf-regional:GetWebACLForResource",
+          "waf-regional:AssociateWebACL",
+          "waf-regional:DisassociateWebACL",
+          "waf-regional:ListWebACLs"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "ShieldPermissions"
+        Effect = "Allow"
+        Action = [
+          "shield:GetSubscriptionState",
+          "shield:DescribeProtection",
+          "shield:CreateProtection",
+          "shield:DeleteProtection"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# =============================================================================
+# AWS Load Balancer Controller Installation
+# =============================================================================
+
+# Kubernetes Service Account for AWS Load Balancer Controller
+resource "kubernetes_service_account" "aws_lb_controller" {
+  count = var.enable_aws_lb_controller ? 1 : 0
+
+  metadata {
+    name      = "aws-load-balancer-controller"
+    namespace = "kube-system"
+    annotations = {
+      "eks.amazonaws.com/role-arn" = aws_iam_role.aws_lb_controller.arn
+    }
+    labels = {
+      "app.kubernetes.io/name"       = "aws-load-balancer-controller"
+      "app.kubernetes.io/component"  = "controller"
+      "app.kubernetes.io/managed-by" = "terraform"
+    }
+  }
+
+  depends_on = [
+    aws_eks_cluster.this,
+    aws_eks_node_group.default,
+    aws_iam_role_policy_attachment.aws_lb_controller,
+    aws_iam_role_policy_attachment.aws_lb_controller_ec2,
+    aws_iam_role_policy.aws_lb_controller_waf
+  ]
+}
+
+# Helm Release for AWS Load Balancer Controller
+resource "helm_release" "aws_load_balancer_controller" {
+  count = var.enable_aws_lb_controller ? 1 : 0
+
+  name       = "aws-load-balancer-controller"
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-load-balancer-controller"
+  namespace  = "kube-system"
+  version    = var.aws_lb_controller_helm_version
+
+  set {
+    name  = "clusterName"
+    value = aws_eks_cluster.this.name
+  }
+
+  set {
+    name  = "serviceAccount.create"
+    value = "false"
+  }
+
+  set {
+    name  = "serviceAccount.name"
+    value = "aws-load-balancer-controller"
+  }
+
+  set {
+    name  = "region"
+    value = data.aws_region.current.region
+  }
+
+  set {
+    name  = "vpcId"
+    value = var.vpc_id
+  }
+
+  dynamic "set" {
+    for_each = var.aws_lb_controller_helm_values
+    content {
+      name  = set.key
+      value = set.value
+    }
+  }
+
+  depends_on = [
+    kubernetes_service_account.aws_lb_controller[0],
+    aws_eks_node_group.default
+  ]
+}
