@@ -15,8 +15,9 @@ module "vpc" {
 module "eks" {
   source = "./modules/eks"
 
-  cluster_name    = local.cluster_name
-  cluster_version = var.cluster_version
+  cluster_name          = local.cluster_name
+  cluster_version       = var.cluster_version
+  enable_ebs_csi_driver = var.enable_ebs_csi_driver
   # Cluster control plane can use both public and private subnets
   subnet_ids = concat(module.vpc.private_subnet_ids, module.vpc.public_subnet_ids)
   # Node groups should be in private subnets only for security

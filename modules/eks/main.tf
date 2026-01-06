@@ -134,6 +134,164 @@ resource "aws_eks_node_group" "default" {
 }
 
 # =============================================================================
+# EBS CSI Driver IAM (IRSA setup)
+# =============================================================================
+
+# IAM role for EBS CSI Driver
+data "aws_iam_policy_document" "ebs_csi_driver_assume_role" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+    }
+
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ebs_csi_driver" {
+  count = var.enable_ebs_csi_driver ? 1 : 0
+
+  name               = "${var.cluster_name}-ebs-csi-driver"
+  assume_role_policy = data.aws_iam_policy_document.ebs_csi_driver_assume_role.json
+  tags               = var.tags
+}
+
+# Custom least-privilege IAM policy for EBS CSI Driver
+resource "aws_iam_role_policy" "ebs_csi_driver" {
+  count = var.enable_ebs_csi_driver ? 1 : 0
+
+  name = "${var.cluster_name}-ebs-csi-driver-policy"
+  role = aws_iam_role.ebs_csi_driver[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "EBSCSIVolumeManagement"
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateVolume",
+          "ec2:DeleteVolume",
+          "ec2:AttachVolume",
+          "ec2:DetachVolume",
+          "ec2:ModifyVolume"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "aws:RequestedRegion" = data.aws_region.current.region
+          }
+        }
+      },
+      {
+        Sid    = "EBSCSISnapshotManagement"
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateSnapshot",
+          "ec2:DeleteSnapshot"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "aws:RequestedRegion" = data.aws_region.current.region
+          }
+        }
+      },
+      {
+        Sid    = "EBSCSIDescribeOperations"
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeInstances",
+          "ec2:DescribeSnapshots",
+          "ec2:DescribeVolumes",
+          "ec2:DescribeAvailabilityZones"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "EBSCSITaggingOperations"
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateTags",
+          "ec2:DescribeTags"
+        ]
+        Resource = [
+          "arn:aws:ec2:*:*:volume/*",
+          "arn:aws:ec2:*:*:snapshot/*"
+        ]
+        Condition = {
+          StringEquals = {
+            "ec2:CreateAction" = [
+              "CreateVolume",
+              "CreateSnapshot"
+            ]
+          }
+        }
+      }
+    ]
+  })
+}
+
+# EBS CSI Driver Add-on
+resource "aws_eks_addon" "ebs_csi_driver" {
+  count = var.enable_ebs_csi_driver ? 1 : 0
+
+  cluster_name                = aws_eks_cluster.this.name
+  addon_name                  = "aws-ebs-csi-driver"
+  addon_version               = var.ebs_csi_driver_version
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+  service_account_role_arn    = aws_iam_role.ebs_csi_driver[0].arn
+
+  depends_on = [
+    aws_eks_node_group.default,
+    aws_iam_role_policy.ebs_csi_driver[0]
+  ]
+
+  tags = var.tags
+}
+
+# Default StorageClass for EBS CSI Driver
+resource "kubernetes_storage_class" "ebs_csi_default" {
+  count = var.enable_ebs_csi_driver ? 1 : 0
+
+  metadata {
+    name = "gp3"
+    annotations = {
+      "storageclass.kubernetes.io/is-default-class" = "true"
+    }
+  }
+
+  storage_provisioner    = "ebs.csi.aws.com"
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+
+  parameters = {
+    type   = "gp3"
+    fsType = "ext4"
+  }
+
+  depends_on = [
+    aws_eks_addon.ebs_csi_driver[0]
+  ]
+}
+
+# =============================================================================
 # AWS Load Balancer Controller IAM (IRSA setup)
 # Note: Kubernetes resources are created at root level to avoid provider cycles
 # =============================================================================

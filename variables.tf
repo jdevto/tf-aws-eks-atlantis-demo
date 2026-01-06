@@ -14,6 +14,12 @@ variable "cluster_version" {
   default = "1.34"
 }
 
+variable "enable_ebs_csi_driver" {
+  description = "Whether to install AWS EBS CSI Driver"
+  type        = bool
+  default     = true
+}
+
 variable "repo_url" {
   description = "Git repository URL that Argo CD will watch for application manifests."
   type        = string

@@ -19,3 +19,8 @@ output "oidc_provider_arn" {
   value       = aws_iam_openid_connect_provider.eks.arn
   description = "ARN of the EKS OIDC provider"
 }
+
+output "ebs_csi_driver_role_arn" {
+  value       = var.enable_ebs_csi_driver ? aws_iam_role.ebs_csi_driver[0].arn : null
+  description = "IAM role ARN for EBS CSI Driver"
+}

@@ -114,6 +114,18 @@ variable "aws_lb_controller_helm_values" {
   default     = {}
 }
 
+variable "enable_ebs_csi_driver" {
+  description = "Whether to install AWS EBS CSI Driver"
+  type        = bool
+  default     = false
+}
+
+variable "ebs_csi_driver_version" {
+  description = "Version of the AWS EBS CSI Driver add-on"
+  type        = string
+  default     = null # Uses latest version
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

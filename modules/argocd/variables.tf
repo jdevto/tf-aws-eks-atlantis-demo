@@ -33,6 +33,6 @@ variable "subnet_ids" {
 
 variable "atlantis_chart_version" {
   type        = string
-  default     = "0.2.3"
+  default     = "0.1.0"
   description = "Version of the k8sforge/atlantis-charts Helm chart"
 }
