@@ -37,3 +37,29 @@ output "argocd_server_url" {
   )
   description = "ArgoCD server ALB URL (HTTP, insecure mode enabled). If showing a command, Ingress status is not populated yet."
 }
+
+output "argocd_alb_dns_name" {
+  value = try(
+    data.aws_lb.argocd.dns_name,
+    ""
+  )
+  description = "ArgoCD ALB DNS name from AWS LB"
+}
+
+output "argocd_alb_zone_id" {
+  value       = try(data.aws_lb.argocd.zone_id, "")
+  description = "ArgoCD ALB zone ID from AWS LB"
+}
+
+output "atlantis_alb_dns_name" {
+  value = try(
+    data.aws_lb.atlantis.dns_name,
+    ""
+  )
+  description = "Atlantis ALB DNS name from AWS LB"
+}
+
+output "atlantis_alb_zone_id" {
+  value       = try(data.aws_lb.atlantis.zone_id, "")
+  description = "Atlantis ALB zone ID from AWS LB"
+}

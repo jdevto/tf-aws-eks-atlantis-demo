@@ -32,13 +32,28 @@ resource "helm_release" "argocd" {
         enabled          = true
         ingressClassName = "alb"
         hosts            = [] # Accept any host to allow direct ALB DNS access
-        annotations = {
-          "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
-          "alb.ingress.kubernetes.io/target-type"      = "ip"
-          "alb.ingress.kubernetes.io/listen-ports"     = "[{\"HTTP\": 80}]"
-          "alb.ingress.kubernetes.io/subnets"          = join(",", var.subnet_ids)
-          "alb.ingress.kubernetes.io/backend-protocol" = "HTTP"
-        }
+        annotations = merge(
+          {
+            "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
+            "alb.ingress.kubernetes.io/target-type"      = "ip"
+            "alb.ingress.kubernetes.io/subnets"          = join(",", var.subnet_ids)
+            "alb.ingress.kubernetes.io/backend-protocol" = "HTTP"
+          },
+          # HTTP-only configuration
+          !var.enable_https ? {
+            "alb.ingress.kubernetes.io/listen-ports" = "[{\"HTTP\": 80}]"
+          } : {},
+          # HTTPS configuration (base)
+          var.enable_https ? {
+            "alb.ingress.kubernetes.io/listen-ports"    = "[{\"HTTP\": 80}, {\"HTTPS\": 443}]"
+            "alb.ingress.kubernetes.io/certificate-arn" = var.certificate_arn
+            "alb.ingress.kubernetes.io/ssl-policy"      = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+          } : {},
+          # HTTPS redirect (optional)
+          var.enable_https && var.ssl_redirect ? {
+            "alb.ingress.kubernetes.io/ssl-redirect" = "443"
+          } : {}
+        )
       }
       healthCheck = {
         enabled  = true
@@ -72,6 +87,16 @@ data "kubernetes_ingress_v1" "argocd_server" {
   metadata {
     name      = "argocd-server"
     namespace = var.namespace
+  }
+
+  depends_on = [helm_release.argocd]
+}
+
+# Get the ALB by its DNS name
+data "aws_lb" "argocd" {
+  tags = {
+    "elbv2.k8s.aws/cluster" = var.cluster_name
+    "ingress.k8s.aws/stack" = "argocd/argocd-ingress"
   }
 
   depends_on = [helm_release.argocd]

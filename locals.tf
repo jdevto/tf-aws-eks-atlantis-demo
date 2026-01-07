@@ -1,4 +1,5 @@
 locals {
+  name         = "${var.cluster_name}-${random_id.suffix.hex}"
   cluster_name = var.cluster_name
   region       = var.region
 

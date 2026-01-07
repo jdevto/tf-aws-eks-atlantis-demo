@@ -11,6 +11,16 @@ module "vpc" {
   })
 }
 
+module "s3-backend" {
+  source = "./modules/s3"
+
+  name                                 = local.name
+  enable_versioning                    = var.s3_enable_versioning
+  s3_force_destroy                     = var.s3_force_destroy
+  dynamodb_deletion_protection_enabled = var.dynamodb_deletion_protection_enabled
+  tags                                 = local.common_tags
+}
+
 # EKS Module
 module "eks" {
   source = "./modules/eks"
@@ -30,9 +40,47 @@ module "eks" {
 module "argocd" {
   source = "./modules/argocd"
 
-  repo_url        = var.repo_url
-  target_revision = var.target_revision
-  aws_region      = var.region
-  cluster_name    = module.eks.cluster_name
-  subnet_ids      = module.vpc.public_subnet_ids
+  aws_region             = var.region
+  cluster_name           = module.eks.cluster_name
+  subnet_ids             = module.vpc.public_subnet_ids
+  enable_https           = var.enable_https
+  certificate_arn        = var.enable_https ? data.aws_acm_certificate.web.arn : ""
+  domain_name            = var.domain_name
+  github_owner           = var.github_owner
+  github_app_id          = var.github_app_id
+  github_app_private_key = var.github_app_private_key
+  github_webhook_secret  = var.github_webhook_secret
+  state_bucket_name      = module.s3-backend.state_bucket_name
+  state_lock_table       = module.s3-backend.lock_table_name
+}
+
+module "route53-argocd" {
+  source = "./modules/route53"
+
+  name         = "argocd"
+  domain_name  = var.domain_name
+  alb_dns_name = module.argocd.argocd_alb_dns_name
+  alb_zone_id  = module.argocd.argocd_alb_zone_id
+}
+
+module "route53-atlantis" {
+  source = "./modules/route53"
+
+  name         = "atlantis"
+  domain_name  = var.domain_name
+  alb_dns_name = module.argocd.atlantis_alb_dns_name
+  alb_zone_id  = module.argocd.atlantis_alb_zone_id
+}
+
+module "github" {
+  source = "./modules/github"
+
+  repository_name       = var.demo_repo_name
+  github_owner          = var.github_owner
+  github_app_id         = var.github_app_id
+  github_webhook_secret = var.github_webhook_secret
+  atlantis_url          = "https://${module.route53-atlantis.custom_domain}"
+  state_bucket_name     = module.s3-backend.state_bucket_name
+  state_lock_table      = module.s3-backend.lock_table_name
+  region                = var.region
 }

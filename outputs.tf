@@ -22,3 +22,13 @@ output "argocd_password" {
   description = "ArgoCD password"
   value       = module.argocd.argocd_password
 }
+
+output "argocd_custom_domain" {
+  description = "ArgoCD custom domain"
+  value       = module.route53-argocd.custom_domain
+}
+
+output "atlantis_custom_domain" {
+  description = "Atlantis custom domain"
+  value       = module.route53-atlantis.custom_domain
+}
