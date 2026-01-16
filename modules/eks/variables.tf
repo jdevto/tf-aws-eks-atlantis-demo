@@ -130,3 +130,35 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "enable_shared_alb" {
+  type        = bool
+  default     = false
+  description = "Enable shared ALB functionality. When true, sets up data sources and outputs for shared ALB discovery."
+}
+
+variable "shared_alb_ingress_group_name" {
+  type        = string
+  default     = "shared-alb"
+  description = "Name of the ingress group for shared ALB. All ingresses with this group name will share the same ALB. Only used when enable_shared_alb is true."
+}
+
+variable "aws_auth_map_users" {
+  type = list(object({
+    userarn  = string
+    username = string
+    groups   = list(string)
+  }))
+  default     = []
+  description = "List of IAM users to add to aws-auth ConfigMap for Kubernetes access"
+}
+
+variable "aws_auth_map_roles" {
+  type = list(object({
+    rolearn  = string
+    username = string
+    groups   = list(string)
+  }))
+  default     = []
+  description = "List of IAM roles to add to aws-auth ConfigMap for Kubernetes access"
+}

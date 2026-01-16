@@ -19,26 +19,6 @@ resource "aws_s3_bucket_versioning" "this" {
   }
 }
 
-# DynamoDB table for Terraform state locking
-resource "aws_dynamodb_table" "lock" {
-  count = var.enable_terraform_state_locking_dynamodb ? 1 : 0
-
-  name         = var.name
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-
-  deletion_protection_enabled = var.dynamodb_deletion_protection_enabled
-
-  tags = merge(var.tags, {
-    Name = var.name
-  })
-}
-
 # S3 bucket server-side encryption
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   bucket = aws_s3_bucket.this.id

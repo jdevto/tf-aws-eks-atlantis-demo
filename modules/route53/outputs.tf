@@ -1,4 +1,4 @@
 output "custom_domain" {
   description = "Custom domain FQDN"
-  value       = aws_route53_record.this.fqdn
+  value       = length(aws_route53_record.this) > 0 ? aws_route53_record.this[0].fqdn : ""
 }

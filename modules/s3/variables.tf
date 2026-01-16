@@ -15,12 +15,6 @@ variable "s3_force_destroy" {
   default     = false
 }
 
-variable "dynamodb_deletion_protection_enabled" {
-  description = "Enable deletion protection for the DynamoDB table"
-  type        = bool
-  default     = true
-}
-
 variable "tags" {
   description = "A map of tags to assign to the resources"
   type        = map(string)
@@ -44,10 +38,4 @@ variable "upload_files" {
     })
   })
   default = null
-}
-
-variable "enable_terraform_state_locking_dynamodb" {
-  description = "Enable Terraform state locking for the S3 bucket"
-  type        = bool
-  default     = true
 }

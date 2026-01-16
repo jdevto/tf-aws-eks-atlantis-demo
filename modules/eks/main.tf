@@ -134,6 +134,46 @@ resource "aws_eks_node_group" "default" {
 }
 
 # =============================================================================
+# AWS Auth ConfigMap
+# Maps IAM users and roles to Kubernetes RBAC groups
+# Automatically includes the node group role so worker nodes can authenticate
+# =============================================================================
+
+locals {
+  # Always include the node group role for worker node authentication
+  node_group_role = {
+    rolearn  = aws_iam_role.eks_nodes.arn
+    username = "system:node:{{EC2PrivateDNSName}}"
+    groups = [
+      "system:bootstrappers",
+      "system:nodes"
+    ]
+  }
+
+  # Combine node group role with user-provided roles
+  all_map_roles = concat([local.node_group_role], var.aws_auth_map_roles)
+}
+
+resource "kubernetes_config_map_v1" "aws_auth" {
+  count = length(var.aws_auth_map_users) > 0 || length(var.aws_auth_map_roles) > 0 || true ? 1 : 0
+
+  metadata {
+    name      = "aws-auth"
+    namespace = "kube-system"
+  }
+
+  data = {
+    mapUsers = length(var.aws_auth_map_users) > 0 ? yamlencode(var.aws_auth_map_users) : yamlencode([])
+    mapRoles = yamlencode(local.all_map_roles)
+  }
+
+  depends_on = [
+    aws_eks_cluster.this,
+    aws_eks_node_group.default
+  ]
+}
+
+# =============================================================================
 # EBS CSI Driver IAM (IRSA setup)
 # =============================================================================
 
@@ -474,4 +514,34 @@ resource "helm_release" "aws_load_balancer_controller" {
     kubernetes_service_account.aws_lb_controller[0],
     aws_eks_node_group.default
   ]
+}
+
+data "aws_lbs" "shared_alb" {
+  count = var.enable_shared_alb && var.shared_alb_ingress_group_name != "" ? 1 : 0
+
+  tags = {
+    "elbv2.k8s.aws/cluster" = aws_eks_cluster.this.name
+    "ingress.k8s.aws/stack" = var.shared_alb_ingress_group_name
+  }
+
+  depends_on = [
+    helm_release.aws_load_balancer_controller
+  ]
+}
+
+locals {
+  shared_alb_arns_list = var.enable_shared_alb && var.shared_alb_ingress_group_name != "" ? try(
+    tolist(data.aws_lbs.shared_alb[0].arns),
+    []
+  ) : []
+  shared_alb_arn = length(local.shared_alb_arns_list) > 0 ? local.shared_alb_arns_list[0] : ""
+
+  shared_alb_for_each_map = var.enable_shared_alb && var.shared_alb_ingress_group_name != "" && try(local.shared_alb_arn, "") != "" ? {
+    shared = local.shared_alb_arn
+  } : {}
+}
+
+data "aws_lb" "shared_alb_details" {
+  for_each = local.shared_alb_for_each_map
+  arn      = each.value
 }

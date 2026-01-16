@@ -43,6 +43,12 @@ variable "enable_https" {
   default     = false
 }
 
+variable "certificate_arn" {
+  description = "ACM certificate ARN for HTTPS. Required when enable_https is true."
+  type        = string
+  default     = ""
+}
+
 variable "github_owner" {
   description = "GitHub organization name (or username) where the repository will be created. Set this to your specific organization name."
   type        = string
@@ -115,13 +121,34 @@ variable "s3_force_destroy" {
   default     = true
 }
 
-variable "dynamodb_deletion_protection_enabled" {
-  description = "Enable deletion protection for the DynamoDB table"
-  type        = bool
-  default     = false
-}
 variable "tags" {
   description = "Common tags to apply to all resources"
   type        = map(string)
   default     = {}
+}
+
+variable "enable_shared_alb" {
+  description = "Enable shared ALB functionality. When true, sets up shared ALB for multiple services to use."
+  type        = bool
+  default     = false
+}
+
+variable "aws_auth_map_users" {
+  type = list(object({
+    userarn  = string
+    username = string
+    groups   = list(string)
+  }))
+  default     = []
+  description = "List of IAM users to add to aws-auth ConfigMap for Kubernetes access"
+}
+
+variable "aws_auth_map_roles" {
+  type = list(object({
+    rolearn  = string
+    username = string
+    groups   = list(string)
+  }))
+  default     = []
+  description = "List of IAM roles to add to aws-auth ConfigMap for Kubernetes access"
 }

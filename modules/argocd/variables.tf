@@ -40,49 +40,13 @@ variable "certificate_arn" {
   description = "ACM certificate ARN for HTTPS. Required when enable_https is true."
 }
 
-variable "atlantis_chart_version" {
+variable "shared_alb_ingress_group_name" {
   type        = string
-  default     = "0.1.9"
-  description = "Version of the k8sforge/atlantis-charts Helm chart"
+  default     = "shared-alb"
+  description = "Name of the ingress group for shared ALB. All ingresses with this group name will share the same ALB."
 }
 
 variable "domain_name" {
-  description = "Domain name"
   type        = string
-}
-
-variable "github_owner" {
-  description = "GitHub organization name (or username) where the repository will be created. Set this to your specific organization name."
-  type        = string
-}
-
-variable "github_app_id" {
-  type        = number
-  description = "GitHub App ID for Atlantis authentication"
-}
-
-variable "github_app_private_key" {
-  type        = string
-  description = "GitHub App private key (PEM) for Atlantis authentication"
-}
-
-variable "github_webhook_secret" {
-  type        = string
-  description = "GitHub webhook secret for Atlantis authentication"
-}
-
-variable "default_tf_version" {
-  type        = string
-  default     = "1.6.0"
-  description = "Default Terraform version for Atlantis"
-}
-
-variable "state_bucket_name" {
-  type        = string
-  description = "S3 bucket name for Terraform state"
-}
-
-variable "state_lock_table" {
-  type        = string
-  description = "DynamoDB table name for Terraform state locking"
+  description = "Domain name for ArgoCD (e.g., dev.geonet.cloud). Used to construct the full URL."
 }

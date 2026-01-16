@@ -13,11 +13,6 @@ variable "state_bucket_name" {
   type        = string
 }
 
-variable "state_lock_table" {
-  description = "Name of the DynamoDB table for Terraform state locking"
-  type        = string
-}
-
 variable "region" {
   description = "AWS region"
   type        = string
@@ -31,6 +26,12 @@ variable "github_owner" {
 variable "github_app_id" {
   description = "GitHub App ID to install on the organization"
   type        = number
+}
+
+variable "github_app_private_key" {
+  description = "GitHub App private key (PEM format) for creating PRs via workflow"
+  type        = string
+  sensitive   = true
 }
 
 variable "github_webhook_secret" {
