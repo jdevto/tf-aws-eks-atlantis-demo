@@ -1,6 +1,11 @@
 # Get current AWS region
 data "aws_region" "current" {}
 
+# Get VPC CIDR for health check rules
+data "aws_vpc" "this" {
+  id = var.vpc_id
+}
+
 # =============================================================================
 # EKS (native resources)
 # =============================================================================
@@ -539,9 +544,118 @@ locals {
   shared_alb_for_each_map = var.enable_shared_alb && var.shared_alb_ingress_group_name != "" && try(local.shared_alb_arn, "") != "" ? {
     shared = local.shared_alb_arn
   } : {}
+
+  # Merge VPC CIDR with allowed IPs
+  # VPC CIDR is always included for internal ALB health checks and internal traffic
+  # Remove duplicates in case user already included VPC CIDR in their allowed IPs
+  shared_alb_allowed_cidrs = var.enable_shared_alb && length(var.shared_alb_allowed_ips) > 0 ? distinct(concat(
+    [data.aws_vpc.this.cidr_block],
+    var.shared_alb_allowed_ips
+  )) : []
 }
 
 data "aws_lb" "shared_alb_details" {
   for_each = local.shared_alb_for_each_map
   arn      = each.value
+}
+
+# =============================================================================
+# Security Group for Shared ALB
+# Restricts access to allowed IPs when shared_alb_allowed_ips is configured
+# =============================================================================
+
+resource "aws_security_group" "shared_alb" {
+  count = var.enable_shared_alb && length(var.shared_alb_allowed_ips) > 0 ? 1 : 0
+
+  name        = "${var.cluster_name}-shared-alb"
+  description = "Security group for shared ALB with IP restrictions"
+  vpc_id      = var.vpc_id
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.cluster_name}-shared-alb"
+    }
+  )
+}
+
+# Allow HTTP from VPC CIDR + allowed IPs
+resource "aws_security_group_rule" "shared_alb_http_ingress" {
+  count = var.enable_shared_alb && length(var.shared_alb_allowed_ips) > 0 ? 1 : 0
+
+  type              = "ingress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  cidr_blocks       = local.shared_alb_allowed_cidrs
+  security_group_id = aws_security_group.shared_alb[0].id
+  description       = "Allow HTTP from VPC CIDR and allowed IPs"
+}
+
+# Allow HTTPS from VPC CIDR + allowed IPs
+resource "aws_security_group_rule" "shared_alb_https_ingress" {
+  count = var.enable_shared_alb && length(var.shared_alb_allowed_ips) > 0 ? 1 : 0
+
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = local.shared_alb_allowed_cidrs
+  security_group_id = aws_security_group.shared_alb[0].id
+  description       = "Allow HTTPS from VPC CIDR and allowed IPs"
+}
+
+# Allow all outbound traffic (for health checks and backend communication)
+resource "aws_security_group_rule" "shared_alb_egress" {
+  count = var.enable_shared_alb && length(var.shared_alb_allowed_ips) > 0 ? 1 : 0
+
+  type              = "egress"
+  from_port         = 0
+  to_port           = 65535
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.shared_alb[0].id
+  description       = "Allow all outbound traffic"
+}
+
+# =============================================================================
+# Allow ALB to communicate with nodes
+# When using a custom ALB security group, we need to ensure nodes allow
+# traffic from the ALB security group for health checks and backend traffic
+# =============================================================================
+
+# Get the node security group from the node group
+# EKS automatically creates a security group for the node group and tags it
+# We find it by the cluster name tag - EKS tags all cluster resources with this
+data "aws_security_groups" "node_security_groups" {
+  count = var.enable_shared_alb && length(var.shared_alb_allowed_ips) > 0 ? 1 : 0
+
+  filter {
+    name   = "tag:kubernetes.io/cluster/${var.cluster_name}"
+    values = ["owned"]
+  }
+
+  # Filter for node security groups - they're typically tagged with eks:nodegroup-name
+  # or we can find them by excluding the cluster security group
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
+  }
+
+  depends_on = [aws_eks_node_group.default]
+}
+
+# Allow traffic from ALB security group to node security groups
+# This allows the ALB to perform health checks and forward traffic to pods
+# Note: We allow all TCP ports (0-65535) to cover all possible service ports
+resource "aws_security_group_rule" "node_from_alb" {
+  for_each = var.enable_shared_alb && length(var.shared_alb_allowed_ips) > 0 && length(try(data.aws_security_groups.node_security_groups[0].ids, [])) > 0 ? toset(data.aws_security_groups.node_security_groups[0].ids) : []
+
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 65535
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.shared_alb[0].id
+  security_group_id        = each.value
+  description              = "Allow traffic from shared ALB security group to nodes"
 }

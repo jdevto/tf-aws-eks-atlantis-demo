@@ -162,3 +162,9 @@ variable "aws_auth_map_roles" {
   default     = []
   description = "List of IAM roles to add to aws-auth ConfigMap for Kubernetes access"
 }
+
+variable "shared_alb_allowed_ips" {
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+  description = "List of CIDR blocks allowed to access the shared ALB. If empty, all IPs are allowed. Example: [\"1.2.3.4/32\", \"10.0.0.0/8\"]"
+}

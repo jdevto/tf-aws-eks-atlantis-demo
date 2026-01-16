@@ -20,6 +20,71 @@ variable "enable_ebs_csi_driver" {
   default     = true
 }
 
+variable "bitwarden_organization_id" {
+  description = "Bitwarden organization ID"
+  type        = string
+  default     = null
+}
+
+variable "bitwarden_access_token" {
+  description = "Bitwarden machine account access token (sensitive)"
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "bitwarden_secrets" {
+  description = "Map of Bitwarden secrets to sync. Key is the secret name, value is the secret_id. Key name in Kubernetes secret will be auto-generated from the secret name."
+  type        = map(string) # Map of secret_name -> secret_id
+  default     = {}
+}
+
+variable "bitwarden_reader_secret_names" {
+  description = "List of Kubernetes secret names for the bitwarden-reader app to display. If null, will use all secrets from bitwarden_secrets."
+  type        = list(string)
+  default     = null
+}
+
+variable "bitwarden_operator_helm_version" {
+  description = "Version of the Bitwarden Secrets Manager Operator Helm chart. If null, uses latest."
+  type        = string
+  default     = null
+}
+
+variable "bitwarden_bw_secrets_manager_refresh_interval" {
+  description = "Refresh interval for Bitwarden Secrets Manager in seconds. Minimum value is 180. Default is 300 (5 minutes)."
+  type        = number
+  default     = 300
+}
+
+variable "bitwarden_manager_image_tag" {
+  description = "Tag for the Bitwarden Secrets Manager Operator manager container image. If empty string (default), will use the Chart's AppVersion. Set to override with a specific image tag."
+  type        = string
+  default     = ""
+}
+
+variable "bitwarden_replicas" {
+  description = "Number of replicas for the Bitwarden operator. For HA, set to 2+ (with leader election, only one will be active). If null, uses chart default."
+  type        = number
+  default     = null
+}
+
+variable "bitwarden_update_strategy" {
+  description = "Deployment update strategy for Bitwarden operator. Options: RollingUpdate (default) or Recreate. RollingUpdate recommended for HA."
+  type        = string
+  default     = "RollingUpdate"
+  validation {
+    condition     = contains(["RollingUpdate", "Recreate"], var.bitwarden_update_strategy)
+    error_message = "bitwarden_update_strategy must be either RollingUpdate or Recreate"
+  }
+}
+
+variable "bitwarden_enable" {
+  description = "Enable/disable the Bitwarden Secrets Manager module"
+  type        = bool
+  default     = true
+}
+
 variable "repo_url" {
   description = "Git repository URL that Argo CD will watch for application manifests."
   type        = string
@@ -151,4 +216,10 @@ variable "aws_auth_map_roles" {
   }))
   default     = []
   description = "List of IAM roles to add to aws-auth ConfigMap for Kubernetes access"
+}
+
+variable "shared_alb_allowed_ips" {
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+  description = "List of CIDR blocks allowed to access the shared ALB. If empty, all IPs are allowed. Example: [\"1.2.3.4/32\", \"10.0.0.0/8\"]"
 }

@@ -50,3 +50,8 @@ output "shared_alb_ingress_group_name" {
   value       = var.enable_shared_alb ? var.shared_alb_ingress_group_name : ""
   description = "Name of the ingress group for shared ALB. Empty if enable_shared_alb is false."
 }
+
+output "shared_alb_security_group_id" {
+  value       = var.enable_shared_alb && length(var.shared_alb_allowed_ips) > 0 ? aws_security_group.shared_alb[0].id : ""
+  description = "Security group ID for shared ALB with IP restrictions. Empty if IP restrictions are not configured."
+}

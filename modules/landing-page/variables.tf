@@ -31,3 +31,33 @@ variable "ssl_redirect" {
   default     = true
   description = "Redirect HTTP to HTTPS when enable_https is true"
 }
+
+variable "shared_alb_security_group_id" {
+  type        = string
+  default     = ""
+  description = "Security group ID for shared ALB with IP restrictions. If provided, will be attached to the ALB."
+}
+
+variable "argocd_path_prefix" {
+  type        = string
+  default     = "/argocd"
+  description = "Path prefix for ArgoCD links in the landing page"
+}
+
+variable "atlantis_path_prefix" {
+  type        = string
+  default     = "/atlantis"
+  description = "Path prefix for Atlantis links in the landing page"
+}
+
+variable "bitwarden_reader_path_prefix" {
+  type        = string
+  default     = "/reader"
+  description = "Path prefix for Bitwarden Reader links in the landing page"
+}
+
+variable "favicon_path" {
+  type        = string
+  default     = null
+  description = "Path to favicon.svg file. If null, a default favicon will be used. Path should be relative to the module directory."
+}

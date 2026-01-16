@@ -21,22 +21,22 @@ resource "helm_release" "argocd" {
             port = 80
           }
           insecure = true
-          # Configure ArgoCD to serve from /argocd subpath
-          rootpath = "/argocd"
-          basehref = "/argocd"
+          # Configure ArgoCD to serve from subpath
+          rootpath = var.argocd_path_prefix
+          basehref = var.argocd_path_prefix
           # Additional server configuration for subpath
           extraArgs = [
-            "--rootpath=/argocd",
-            "--basehref=/argocd"
+            "--rootpath=${var.argocd_path_prefix}",
+            "--basehref=${var.argocd_path_prefix}"
           ]
         }
         configs = {
           params = {
             "server.insecure" = "true"
-            "server.rootpath" = "/argocd"
-            "server.basehref" = "/argocd"
+            "server.rootpath" = var.argocd_path_prefix
+            "server.basehref" = var.argocd_path_prefix
             # Set the URL to help ArgoCD generate correct basehref
-            "server.url" = var.enable_https ? "https://${var.domain_name}/argocd" : "http://${var.domain_name}/argocd"
+            "server.url" = var.enable_https ? "https://${var.domain_name}${var.argocd_path_prefix}" : "http://${var.domain_name}${var.argocd_path_prefix}"
           }
         }
       }
@@ -81,8 +81,13 @@ resource "kubernetes_ingress_v1" "argocd" {
         "alb.ingress.kubernetes.io/target-type"      = "ip"
         "alb.ingress.kubernetes.io/subnets"          = join(",", var.subnet_ids)
         "alb.ingress.kubernetes.io/backend-protocol" = "HTTP"
+        "alb.ingress.kubernetes.io/healthcheck-path" = "${var.argocd_path_prefix}/healthz"
         "alb.ingress.kubernetes.io/group.name"       = var.shared_alb_ingress_group_name
       },
+      # Security group for IP restrictions (if provided)
+      var.shared_alb_security_group_id != "" ? {
+        "alb.ingress.kubernetes.io/security-groups" = var.shared_alb_security_group_id
+      } : {},
       # HTTP-only configuration
       !var.enable_https ? {
         "alb.ingress.kubernetes.io/listen-ports" = "[{\"HTTP\": 80}]"
@@ -105,8 +110,22 @@ resource "kubernetes_ingress_v1" "argocd" {
 
     rule {
       http {
+        # Health check path - ArgoCD serves /healthz regardless of rootpath
         path {
-          path      = "/argocd"
+          path      = "/healthz"
+          path_type = "Exact"
+          backend {
+            service {
+              name = "argocd-server"
+              port {
+                number = 80
+              }
+            }
+          }
+        }
+        # Main ArgoCD path
+        path {
+          path      = var.argocd_path_prefix
           path_type = "Prefix"
           backend {
             service {
@@ -136,7 +155,7 @@ resource "kubernetes_config_map_v1_data" "argocd_cm_patch" {
   force = true
 
   data = {
-    url = var.enable_https ? "https://${var.domain_name}/argocd" : "http://${var.domain_name}/argocd"
+    url = var.enable_https ? "https://${var.domain_name}${var.argocd_path_prefix}" : "http://${var.domain_name}${var.argocd_path_prefix}"
   }
 
   depends_on = [helm_release.argocd]

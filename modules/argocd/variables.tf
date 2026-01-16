@@ -50,3 +50,15 @@ variable "domain_name" {
   type        = string
   description = "Domain name for ArgoCD (e.g., dev.geonet.cloud). Used to construct the full URL."
 }
+
+variable "shared_alb_security_group_id" {
+  type        = string
+  default     = ""
+  description = "Security group ID for shared ALB with IP restrictions. Empty if IP restrictions are not configured."
+}
+
+variable "argocd_path_prefix" {
+  type        = string
+  default     = "/argocd"
+  description = "Path prefix for ArgoCD (e.g., /argocd). Used for ingress paths and health checks."
+}

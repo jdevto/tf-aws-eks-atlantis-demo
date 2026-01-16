@@ -317,18 +317,3 @@ resource "github_repository_webhook" "atlantis" {
 
   depends_on = [githubx_repository.this]
 }
-
-# # GitHub Actions secrets for create-pr workflow
-# # These secrets are used by the create-pr.yml workflow to generate GitHub App tokens
-# # Note: app-id must be stored as a string (no quotes, no whitespace, just the number)
-# resource "github_actions_secret" "github_app_id" {
-#   repository      = githubx_repository.this.name
-#   secret_name     = "GH_PR_BOT_APP_ID"
-#   plaintext_value = trimspace(tostring(var.github_app_id))
-# }
-
-# resource "github_actions_secret" "github_app_private_key" {
-#   repository      = githubx_repository.this.name
-#   secret_name     = "GH_PR_BOT_PRIVATE_KEY"
-#   plaintext_value = var.github_app_private_key
-# }

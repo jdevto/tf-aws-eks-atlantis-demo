@@ -92,3 +92,15 @@ variable "argocd_namespace" {
   default     = "argocd"
   description = "Namespace where ArgoCD is installed (used for dependency)"
 }
+
+variable "shared_alb_security_group_id" {
+  type        = string
+  default     = ""
+  description = "Security group ID for shared ALB with IP restrictions. Empty if IP restrictions are not configured."
+}
+
+variable "atlantis_path_prefix" {
+  type        = string
+  default     = "/atlantis"
+  description = "Path prefix for Atlantis (e.g., /atlantis). Used for ingress paths and health checks."
+}

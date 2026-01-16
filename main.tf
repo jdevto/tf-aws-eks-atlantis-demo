@@ -39,9 +39,11 @@ module "eks" {
   # AWS Auth ConfigMap - map IAM users and roles for Kubernetes access
   aws_auth_map_users = var.aws_auth_map_users
   aws_auth_map_roles = var.aws_auth_map_roles
+
+  # Shared ALB IP restrictions
+  shared_alb_allowed_ips = var.shared_alb_allowed_ips
 }
 
-# In main.tf
 module "route53_platform" {
   source = "./modules/route53"
 
@@ -61,9 +63,15 @@ module "landing_page" {
 
   subnet_ids                    = module.vpc.public_subnet_ids
   shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
+  shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
   enable_https                  = var.enable_https
   certificate_arn               = var.enable_https ? var.certificate_arn : ""
-  ssl_redirect                  = var.enable_https ? true : false
+  ssl_redirect                  = var.enable_https
+
+  # Path prefixes for service links
+  argocd_path_prefix           = "/argocd"
+  atlantis_path_prefix         = "/atlantis"
+  bitwarden_reader_path_prefix = "/reader"
 
   depends_on = [module.eks]
 }
@@ -77,9 +85,96 @@ module "argocd" {
   subnet_ids                    = module.vpc.public_subnet_ids
   enable_https                  = var.enable_https
   certificate_arn               = var.certificate_arn
-  ssl_redirect                  = var.enable_https ? true : false
+  ssl_redirect                  = var.enable_https
   shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
+  shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
   domain_name                   = var.domain_name
+}
+
+# Bitwarden Secrets Manager Module
+module "bitwarden" {
+  source = "./modules/bitwarden"
+
+  enable          = var.bitwarden_enable
+  organization_id = var.bitwarden_organization_id
+  access_token    = var.bitwarden_access_token
+
+  operator_helm_version               = var.bitwarden_operator_helm_version
+  bw_secrets_manager_refresh_interval = var.bitwarden_bw_secrets_manager_refresh_interval
+  manager_image_tag                   = var.bitwarden_manager_image_tag
+  replicas                            = var.bitwarden_replicas
+  update_strategy                     = var.bitwarden_update_strategy
+
+  cluster_endpoint = module.eks.cluster_endpoint
+  cluster_ca_data  = module.eks.cluster_ca_data
+  cluster_name     = module.eks.cluster_name
+  argocd_namespace = module.argocd.argocd_namespace
+
+  tags = local.common_tags
+
+  depends_on = [
+    module.vpc,
+    module.eks,
+    module.argocd
+  ]
+}
+
+# Bitwarden Secret Sync Modules
+# Create a module instance for each secret in bitwarden_secrets map
+module "bitwarden_secrets" {
+  source   = "./modules/bitwarden-secret"
+  for_each = var.bitwarden_secrets
+
+  name            = each.key
+  namespace       = module.bitwarden.secrets_namespace
+  organization_id = var.bitwarden_organization_id
+  secret_id       = each.value
+
+  access_token_secret_name = module.bitwarden.auth_secret_name
+  access_token_secret_key  = "token"
+
+  tags = local.common_tags
+
+  depends_on = [
+    module.vpc,
+    module.eks,
+    module.bitwarden
+  ]
+}
+
+# Bitwarden Reader Demo Web App
+# Demonstrates reading secrets synced from Bitwarden to Kubernetes
+module "bitwarden_reader" {
+  source = "./modules/bitwarden-reader"
+
+  namespace = module.bitwarden.secrets_namespace
+  secret_names = var.bitwarden_reader_secret_names != null ? var.bitwarden_reader_secret_names : (
+    [for name, module in module.bitwarden_secrets : module.kubernetes_secret_name]
+  )
+
+  # Shared ALB configuration
+  shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
+  shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
+  subnet_ids                    = module.vpc.public_subnet_ids
+  path_prefix                   = "/reader"
+
+  # HTTPS configuration
+  enable_https    = var.enable_https
+  certificate_arn = var.enable_https ? var.certificate_arn : ""
+  ssl_redirect    = var.enable_https
+
+  # ArgoCD configuration
+  argocd_namespace = module.argocd.argocd_namespace
+
+  tags = local.common_tags
+
+  depends_on = [
+    module.vpc,
+    module.eks,
+    module.argocd,
+    module.bitwarden,
+    module.bitwarden_secrets
+  ]
 }
 
 # Atlantis Module
@@ -91,7 +186,7 @@ module "atlantis" {
   subnet_ids                    = module.vpc.public_subnet_ids
   enable_https                  = var.enable_https
   certificate_arn               = var.certificate_arn
-  ssl_redirect                  = var.enable_https ? true : false
+  ssl_redirect                  = var.enable_https
   domain_name                   = var.domain_name
   github_owner                  = var.github_owner
   github_app_id                 = var.github_app_id
@@ -99,6 +194,7 @@ module "atlantis" {
   github_webhook_secret         = var.github_webhook_secret
   state_bucket_name             = module.s3-backend.state_bucket_name
   shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
+  shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
   argocd_namespace              = "argocd" # Must match the namespace where ArgoCD is installed
 
   depends_on = [module.argocd]

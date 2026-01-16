@@ -66,7 +66,7 @@ resource "kubectl_manifest" "atlantis_application" {
               }
 
               # Atlantis URL for webhooks and external access
-              atlantisUrl = var.enable_https ? "https://platform.${var.domain_name}/atlantis" : "http://platform.${var.domain_name}/atlantis"
+              atlantisUrl = var.enable_https ? "https://platform.${var.domain_name}${var.atlantis_path_prefix}" : "http://platform.${var.domain_name}${var.atlantis_path_prefix}"
 
               # Server-side repository configuration
               # Allow repositories to set apply_requirements in their atlantis.yaml
@@ -142,9 +142,13 @@ resource "kubectl_manifest" "atlantis_ingress" {
           "alb.ingress.kubernetes.io/target-type"      = "ip"
           "alb.ingress.kubernetes.io/subnets"          = join(",", var.subnet_ids)
           "alb.ingress.kubernetes.io/backend-protocol" = "HTTP"
-          "alb.ingress.kubernetes.io/healthcheck-path" = "/atlantis/healthz"
+          "alb.ingress.kubernetes.io/healthcheck-path" = "${var.atlantis_path_prefix}/healthz"
           "alb.ingress.kubernetes.io/group.name"       = var.shared_alb_ingress_group_name
         },
+        # Security group for IP restrictions (if provided)
+        var.shared_alb_security_group_id != "" ? {
+          "alb.ingress.kubernetes.io/security-groups" = var.shared_alb_security_group_id
+        } : {},
         # HTTP-only configuration
         !var.enable_https ? {
           "alb.ingress.kubernetes.io/listen-ports" = "[{\"HTTP\": 80}]"
@@ -168,7 +172,7 @@ resource "kubectl_manifest" "atlantis_ingress" {
           http = {
             paths = [
               {
-                path     = "/atlantis"
+                path     = var.atlantis_path_prefix
                 pathType = "Prefix"
                 backend = {
                   service = {
@@ -264,21 +268,21 @@ resource "kubectl_manifest" "atlantis_nginx_config" {
         server {
           listen 80;
 
-          # Rewrite /atlantis/* to /* before proxying to Atlantis
-          location /atlantis/ {
-            rewrite ^/atlantis/(.*)$ /$1 break;
+          # Rewrite path prefix to /* before proxying to Atlantis
+          location ${var.atlantis_path_prefix}/ {
+            rewrite ^${var.atlantis_path_prefix}/(.*)$ /$1 break;
             proxy_pass http://atlantis:80;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_set_header X-Forwarded-Host $host;
-            proxy_set_header X-Forwarded-Prefix /atlantis;
+            proxy_set_header X-Forwarded-Prefix ${var.atlantis_path_prefix};
           }
 
-          # Redirect /atlantis to /atlantis/
-          location = /atlantis {
-            return 301 /atlantis/;
+          # Redirect path prefix without trailing slash to path with trailing slash
+          location = ${var.atlantis_path_prefix} {
+            return 301 ${var.atlantis_path_prefix}/;
           }
         }
       EOT
