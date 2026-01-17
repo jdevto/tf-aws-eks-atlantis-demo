@@ -74,8 +74,47 @@ resource "githubx_repository_file" "create_pr_workflow_main" {
   lifecycle {
     ignore_changes = [content]
   }
+  depends_on = [githubx_repository_file.codeowners_main]
+}
 
-  depends_on = [githubx_repository.this]
+# GitHub Actions workflow for commit message conformance
+resource "githubx_repository_file" "commitmsg_conform_workflow_main" {
+  repository          = githubx_repository.this.name
+  branch              = githubx_repository.this.default_branch
+  file                = ".github/workflows/commitmsg-conform.yml"
+  content             = file("${path.module}/external/commitmsg-conform.yml")
+  commit_message      = <<-EOM
+    feat: add commit message conformance workflow
+
+    Add GitHub Actions workflow to enforce commit message conventions.
+  EOM
+  overwrite_on_create = true
+
+  lifecycle {
+    ignore_changes = [content]
+  }
+
+  depends_on = [githubx_repository_file.create_pr_workflow_main]
+}
+
+# GitHub Actions workflow for markdown linting
+resource "githubx_repository_file" "markdown_lint_workflow_main" {
+  repository          = githubx_repository.this.name
+  branch              = githubx_repository.this.default_branch
+  file                = ".github/workflows/markdown-lint.yml"
+  content             = file("${path.module}/external/markdown-lint.yml")
+  commit_message      = <<-EOM
+    feat: add markdown lint workflow
+
+    Add GitHub Actions workflow to lint markdown files.
+  EOM
+  overwrite_on_create = true
+
+  lifecycle {
+    ignore_changes = [content]
+  }
+
+  depends_on = [githubx_repository_file.commitmsg_conform_workflow_main]
 }
 
 # Branch protection for main branch - requires platform team approval

@@ -171,7 +171,7 @@ variable "github_webhook_secret" {
 variable "demo_repo_name" {
   description = "Name of the demo GitHub repository"
   type        = string
-  default     = "atlantis-demo-infra"
+  default     = "atlantis-terraform-aws"
 }
 
 variable "s3_enable_versioning" {

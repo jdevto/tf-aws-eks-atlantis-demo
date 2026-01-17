@@ -1,9 +1,3 @@
-variable "namespace" {
-  type        = string
-  default     = "argocd"
-  description = "Kubernetes namespace where ArgoCD is installed (for registering the Helm repo)"
-}
-
 variable "cluster_name" {
   type        = string
   description = "Name of the EKS cluster"
@@ -39,7 +33,7 @@ variable "certificate_arn" {
 
 variable "atlantis_chart_version" {
   type        = string
-  default     = "0.1.9"
+  default     = "0.3.0"
   description = "Version of the k8sforge/atlantis-chart Helm chart"
 }
 
@@ -53,21 +47,77 @@ variable "github_owner" {
   type        = string
 }
 
-variable "github_app_id" {
-  type        = number
-  description = "GitHub App ID for Atlantis authentication"
+variable "bitwarden_secrets_namespace" {
+  type        = string
+  description = "Namespace where Bitwarden secrets are synced (e.g., bitwarden-secrets)"
 }
 
-variable "github_app_private_key" {
+variable "bitwarden_organization_id" {
   type        = string
-  description = "GitHub App private key (PEM) for Atlantis authentication"
-  sensitive   = true
+  description = "Bitwarden organization ID for syncing secrets"
 }
 
-variable "github_webhook_secret" {
+variable "bitwarden_auth_token_secret_name" {
   type        = string
-  description = "GitHub webhook secret for Atlantis authentication"
-  sensitive   = true
+  description = "Name of the Kubernetes secret containing Bitwarden access token"
+  default     = "bitwarden-auth-token"
+}
+
+variable "bitwarden_auth_token_secret_key" {
+  type        = string
+  description = "Key name in the Bitwarden access token secret"
+  default     = "token"
+}
+
+variable "github_app_id_secret_id" {
+  type        = string
+  description = "Bitwarden secret ID for GitHub App ID"
+}
+
+variable "github_app_private_key_secret_id" {
+  type        = string
+  description = "Bitwarden secret ID for GitHub App private key"
+}
+
+variable "github_webhook_secret_id" {
+  type        = string
+  description = "Bitwarden secret ID for GitHub webhook secret"
+}
+
+variable "github_app_id_secret_name" {
+  type        = string
+  description = "Name of the Kubernetes secret containing GitHub App ID (synced from Bitwarden)"
+  default     = "github-app-id"
+}
+
+variable "github_app_id_secret_key" {
+  type        = string
+  description = "Key name in the GitHub App ID secret"
+  default     = "github-app-id"
+}
+
+variable "github_app_private_key_secret_name" {
+  type        = string
+  description = "Name of the Kubernetes secret containing GitHub App private key (synced from Bitwarden)"
+  default     = "github-app-private-key"
+}
+
+variable "github_app_private_key_secret_key" {
+  type        = string
+  description = "Key name in the GitHub App private key secret"
+  default     = "github-app-private-key"
+}
+
+variable "github_webhook_secret_name" {
+  type        = string
+  description = "Name of the Kubernetes secret containing GitHub webhook secret (synced from Bitwarden)"
+  default     = "github-webhook-secret"
+}
+
+variable "github_webhook_secret_key" {
+  type        = string
+  description = "Key name in the GitHub webhook secret"
+  default     = "github-webhook-secret"
 }
 
 variable "default_tf_version" {
@@ -78,7 +128,7 @@ variable "default_tf_version" {
 
 variable "state_bucket_name" {
   type        = string
-  description = "S3 bucket name for Terraform state"
+  description = "S3 bucket name for Terraform state (AWS backend). This module is focused on AWS workloads."
 }
 
 variable "shared_alb_ingress_group_name" {
@@ -103,4 +153,10 @@ variable "atlantis_path_prefix" {
   type        = string
   default     = "/atlantis"
   description = "Path prefix for Atlantis (e.g., /atlantis). Used for ingress paths and health checks."
+}
+
+variable "atlantis_namespace" {
+  type        = string
+  default     = "atlantis"
+  description = "Kubernetes namespace where Atlantis will be deployed"
 }

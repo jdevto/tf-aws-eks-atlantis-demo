@@ -207,6 +207,19 @@ resource "kubectl_manifest" "bitwarden_reader_nginx_config" {
         server {
           listen 80;
 
+          # Catch /api requests (from JavaScript constructing absolute URLs) and proxy directly
+          # API calls can't be redirected, so we proxy directly to backend /api
+          location /api/ {
+            proxy_pass http://${var.app_name}:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Prefix ${var.path_prefix};
+            proxy_read_timeout 30;
+          }
+
           # Catch /ws requests (from JavaScript constructing absolute URLs) and proxy directly
           # WebSocket connections can't be redirected, so we proxy directly to backend /ws
           location = /ws {
@@ -260,13 +273,18 @@ resource "kubectl_manifest" "bitwarden_reader_nginx_config" {
             proxy_buffers 8 4k;
             proxy_busy_buffers_size 8k;
 
-            # Rewrite HTML content to fix absolute paths in CSS/JS references
+            # Rewrite HTML/JS content to fix absolute paths in CSS/JS/API references
             sub_filter 'href="/' 'href="${var.path_prefix}/';
             sub_filter "href='/" "href='${var.path_prefix}/";
             sub_filter 'src="/' 'src="${var.path_prefix}/';
             sub_filter "src='/" "src='${var.path_prefix}/";
             sub_filter 'action="/' 'action="${var.path_prefix}/';
             sub_filter "action='/" "action='${var.path_prefix}/";
+            # Rewrite API URLs in JavaScript
+            sub_filter '"/api/' '"${var.path_prefix}/api/';
+            sub_filter "'/api/" "'${var.path_prefix}/api/";
+            sub_filter '"/api"' '"${var.path_prefix}/api';
+            sub_filter "'/api'" "'${var.path_prefix}/api";
             sub_filter_once off;
             sub_filter_types text/html text/css text/javascript application/javascript application/json text/plain;
           }
@@ -364,6 +382,18 @@ resource "kubectl_manifest" "bitwarden_reader_ingress" {
         {
           http = {
             paths = [
+              {
+                path     = "/api"
+                pathType = "Prefix"
+                backend = {
+                  service = {
+                    name = "${var.app_name}-nginx-proxy"
+                    port = {
+                      number = 80
+                    }
+                  }
+                }
+              },
               {
                 path     = "/ws"
                 pathType = "Exact"

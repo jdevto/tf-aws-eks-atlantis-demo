@@ -181,28 +181,49 @@ module "bitwarden_reader" {
 module "atlantis" {
   source = "./modules/atlantis"
 
-  aws_region                    = var.region
-  cluster_name                  = module.eks.cluster_name
-  subnet_ids                    = module.vpc.public_subnet_ids
-  enable_https                  = var.enable_https
-  certificate_arn               = var.certificate_arn
-  ssl_redirect                  = var.enable_https
-  domain_name                   = var.domain_name
-  github_owner                  = var.github_owner
-  github_app_id                 = var.github_app_id
-  github_app_private_key        = var.github_app_private_key
-  github_webhook_secret         = var.github_webhook_secret
+  aws_region      = var.region
+  cluster_name    = module.eks.cluster_name
+  subnet_ids      = module.vpc.public_subnet_ids
+  enable_https    = var.enable_https
+  certificate_arn = var.certificate_arn
+  ssl_redirect    = var.enable_https
+  domain_name     = var.domain_name
+  github_owner    = var.github_owner
+
+  # GitHub credentials from Bitwarden-synced Kubernetes secrets
+  bitwarden_secrets_namespace      = module.bitwarden.secrets_namespace
+  bitwarden_organization_id        = var.bitwarden_organization_id
+  bitwarden_auth_token_secret_name = module.bitwarden.auth_secret_name
+  bitwarden_auth_token_secret_key  = "token"
+
+  # Bitwarden secret IDs for GitHub credentials (used to sync secrets to atlantis namespace)
+  github_app_id_secret_id          = var.bitwarden_secrets["dev-github-app-id"]
+  github_app_private_key_secret_id = var.bitwarden_secrets["dev-github-app-private-key"]
+  github_webhook_secret_id         = var.bitwarden_secrets["dev-github-webhook-secret"]
+
+  # GitHub App secret names and keys (with dev- prefix for this environment)
+  github_app_id_secret_name          = "dev-github-app-id"
+  github_app_id_secret_key           = "dev-github-app-id"
+  github_app_private_key_secret_name = "dev-github-app-private-key"
+  github_app_private_key_secret_key  = "dev-github-app-private-key"
+  github_webhook_secret_name         = "dev-github-webhook-secret"
+  github_webhook_secret_key          = "dev-github-webhook-secret"
+
   state_bucket_name             = module.s3-backend.state_bucket_name
   shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
   shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
   argocd_namespace              = "argocd" # Must match the namespace where ArgoCD is installed
 
-  depends_on = [module.argocd]
+  depends_on = [
+    module.argocd,
+    module.bitwarden,
+    module.bitwarden_secrets
+  ]
 }
 
-# GitHub Module
-module "github" {
-  source = "./modules/github"
+# GitHub Terraform AWS Module
+module "github_terraform_aws" {
+  source = "./modules/github-terraform-aws"
 
   repository_name        = var.demo_repo_name
   github_owner           = var.github_owner

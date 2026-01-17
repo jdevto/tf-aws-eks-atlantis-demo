@@ -605,6 +605,26 @@ resource "aws_security_group_rule" "shared_alb_https_ingress" {
   description       = "Allow HTTPS from VPC CIDR and allowed IPs"
 }
 
+# Allow HTTPS from GitHub webhook IPs (required for GitHub webhooks to reach /atlantis/events)
+# These IPs are specifically for GitHub webhook deliveries only
+# Source: https://api.github.com/meta (hooks section)
+resource "aws_security_group_rule" "shared_alb_https_github_webhooks" {
+  count = var.enable_shared_alb && length(var.shared_alb_allowed_ips) > 0 ? 1 : 0
+
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks = [
+    "140.82.112.0/20",   # GitHub webhooks
+    "143.55.64.0/20",    # GitHub webhooks
+    "185.199.108.0/22",  # GitHub webhooks
+    "192.30.252.0/22",   # GitHub webhooks
+  ]
+  security_group_id = aws_security_group.shared_alb[0].id
+  description       = "Allow HTTPS from GitHub webhook IPs (required for /atlantis/events endpoint)"
+}
+
 # Allow all outbound traffic (for health checks and backend communication)
 resource "aws_security_group_rule" "shared_alb_egress" {
   count = var.enable_shared_alb && length(var.shared_alb_allowed_ips) > 0 ? 1 : 0

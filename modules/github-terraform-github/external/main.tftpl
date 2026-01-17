@@ -1,0 +1,13 @@
+# Example Terraform configuration for GitHub provider demo
+# Create a GitHub team and add it to the repository
+resource "github_team" "example" {
+  name        = "example-team"
+  description = "Example team created via Terraform"
+  privacy     = "closed"
+}
+
+resource "github_team_repository" "example" {
+  team_id    = github_team.example.id
+  repository = "${repository_name}"
+  permission = "pull"
+}

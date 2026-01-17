@@ -1,0 +1,47 @@
+# TODO
+
+## Chart Improvements
+
+- [ ] **Update Bitwarden Reader Helm chart** to support path prefix configuration natively
+  - Add `basePath` or `pathPrefix` configuration option to the chart
+  - Support subpath deployment without requiring nginx proxy workaround
+  - Handle HTML/JS/CSS path rewriting and WebSocket connections at the application level
+  - This would eliminate the need for the nginx proxy deployment, config, and service (currently in `modules/bitwarden-reader/main.tf`)
+
+- [ ] **Update Atlantis Helm chart** to support path prefix configuration natively
+  - Add `basePath` or `pathPrefix` configuration option to the chart
+  - Support subpath deployment without requiring nginx proxy workaround
+  - Handle path rewriting at the application level
+  - This would eliminate the need for the nginx proxy deployment, config, and service (currently in `modules/atlantis/nginx.tf`)
+
+## Authentication & Authorization
+
+- [ ] **Implement AWS Cognito authentication for shared ALB**
+  - Create AWS Cognito User Pool and User Pool Client
+  - Configure User Pool Domain for hosted UI
+  - Create Cognito User Pool groups: `argocd-admin`, `argocd-platform`, `argocd-devops`, `argocd-auditor`
+  - Configure ALB listener rules with Cognito authentication for protected paths:
+    - **Public paths (no auth required):**
+      - `/` - Landing page
+      - `/healthz` - ArgoCD health check (ALB health check endpoint)
+      - `/argocd/healthz` - ArgoCD health check (with path prefix)
+      - `/atlantis/healthz` - Atlantis health check
+      - `/reader/api/v1/health` - Bitwarden Reader health check
+    - **Protected paths (require authentication):**
+      - `/argocd/*` - Require authentication (except health check paths above)
+      - `/atlantis/*` - Require authentication (except health check paths above)
+      - `/reader/*` - Require authentication (except health check paths above)
+  - **Important:** Configure listener rule priorities so health check paths are matched before protected paths (higher priority = evaluated first)
+  - Ensure OAuth/OIDC callback URLs are configured correctly
+  - Enable SSO across apps via shared session cookies
+
+- [ ] **Configure ArgoCD RBAC with Cognito OIDC integration**
+  - Configure OIDC in ArgoCD (`argocd-cm` ConfigMap) to use Cognito as identity provider
+  - Set up RBAC policies in `argocd-rbac-cm` ConfigMap with custom roles:
+    - `role:admin` - Full access (map to `argocd-admin` Cognito group)
+    - `role:platform` - Manage clusters, repos, projects (map to `argocd-platform` Cognito group)
+    - `role:devops` - Manage applications in specific projects (map to `argocd-devops` Cognito group)
+    - `role:readonly` - Read-only access (map to `argocd-auditor` Cognito group)
+  - Configure project-scoped permissions for DevOps role
+  - Set default policy to `role:readonly` for conservative access
+  - Ensure Cognito groups are included in OIDC token claims
