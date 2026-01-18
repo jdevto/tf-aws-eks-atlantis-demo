@@ -1,7 +1,10 @@
 terraform {
   backend "s3" {
     bucket       = "${state_bucket_name}"
-    key          = "${repository_name}/terraform.tfstate"
+    # Directory-based state files: separate state per environment directory
+    # Dev: ${repository_name}/dev/terraform.tfstate
+    # Prod: ${repository_name}/prod/terraform.tfstate
+    key          = "${repository_name}/${environment}/terraform.tfstate"
     region       = "${region}"
     use_lockfile = true
     encrypt      = true

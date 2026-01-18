@@ -37,18 +37,22 @@ resource "kubernetes_secret" "auth_token" {
 # Sync GitHub App secrets from Bitwarden to the Atlantis namespace
 # This allows Atlantis to reference secrets via secretKeyRef (which doesn't support cross-namespace)
 # We create BitwardenSecret CRDs that sync the same secrets to the Atlantis namespace
-resource "kubectl_manifest" "atlantis_github_secrets" {
-  for_each = {
-    app_id          = { secret_name = var.github_app_id_secret_name, secret_key = var.github_app_id_secret_key, secret_id = var.github_app_id_secret_id }
-    app_private_key = { secret_name = var.github_app_private_key_secret_name, secret_key = var.github_app_private_key_secret_key, secret_id = var.github_app_private_key_secret_id }
-    webhook_secret  = { secret_name = var.github_webhook_secret_name, secret_key = var.github_webhook_secret_key, secret_id = var.github_webhook_secret_id }
+locals {
+  github_secrets = {
+    (var.github_app_id_secret_name)          = var.github_app_id_secret_id
+    (var.github_app_private_key_secret_name) = var.github_app_private_key_secret_id
+    (var.github_webhook_secret_name)         = var.github_webhook_secret_id
   }
+}
+
+resource "kubectl_manifest" "atlantis_github_secrets" {
+  for_each = local.github_secrets
 
   yaml_body = yamlencode({
     apiVersion = "k8s.bitwarden.com/v1"
     kind       = "BitwardenSecret"
     metadata = {
-      name      = each.value.secret_name
+      name      = each.key
       namespace = var.atlantis_namespace
       labels = {
         "app.kubernetes.io/name"       = "atlantis-github-secret"
@@ -58,7 +62,7 @@ resource "kubectl_manifest" "atlantis_github_secrets" {
     }
     spec = {
       organizationId = var.bitwarden_organization_id
-      secretName     = each.value.secret_name
+      secretName     = each.key
       authToken = {
         secretName = var.bitwarden_auth_token_secret_name
         secretKey  = var.bitwarden_auth_token_secret_key
@@ -66,8 +70,8 @@ resource "kubectl_manifest" "atlantis_github_secrets" {
         # Following Bitwarden's standard pattern: auth token secret is created in atlantis namespace
       }
       map = [{
-        bwSecretId    = each.value.secret_id
-        secretKeyName = each.value.secret_key
+        bwSecretId    = each.value
+        secretKeyName = each.key
       }]
     }
   })

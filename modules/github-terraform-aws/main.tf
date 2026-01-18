@@ -35,6 +35,18 @@ resource "github_team_repository" "platform" {
   permission = "push" # Push permission allows team members to review and approve PRs
 }
 
+# Grant devops team access to the repository
+data "github_team" "devops" {
+  slug = "devops"
+}
+
+# Required for CODEOWNERS to work - team must have access to be code owners
+resource "github_team_repository" "devops" {
+  team_id    = data.github_team.devops.id
+  repository = githubx_repository.this.name
+  permission = "push" # Push permission allows team members to review and approve PRs
+}
+
 # CODEOWNERS file to require platform team approval
 # Add to main branch first (required for branch protection)
 resource "githubx_repository_file" "codeowners_main" {
@@ -77,48 +89,8 @@ resource "githubx_repository_file" "create_pr_workflow_main" {
   depends_on = [githubx_repository_file.codeowners_main]
 }
 
-# GitHub Actions workflow for commit message conformance
-resource "githubx_repository_file" "commitmsg_conform_workflow_main" {
-  repository          = githubx_repository.this.name
-  branch              = githubx_repository.this.default_branch
-  file                = ".github/workflows/commitmsg-conform.yml"
-  content             = file("${path.module}/external/commitmsg-conform.yml")
-  commit_message      = <<-EOM
-    feat: add commit message conformance workflow
-
-    Add GitHub Actions workflow to enforce commit message conventions.
-  EOM
-  overwrite_on_create = true
-
-  lifecycle {
-    ignore_changes = [content]
-  }
-
-  depends_on = [githubx_repository_file.create_pr_workflow_main]
-}
-
-# GitHub Actions workflow for markdown linting
-resource "githubx_repository_file" "markdown_lint_workflow_main" {
-  repository          = githubx_repository.this.name
-  branch              = githubx_repository.this.default_branch
-  file                = ".github/workflows/markdown-lint.yml"
-  content             = file("${path.module}/external/markdown-lint.yml")
-  commit_message      = <<-EOM
-    feat: add markdown lint workflow
-
-    Add GitHub Actions workflow to lint markdown files.
-  EOM
-  overwrite_on_create = true
-
-  lifecycle {
-    ignore_changes = [content]
-  }
-
-  depends_on = [githubx_repository_file.commitmsg_conform_workflow_main]
-}
-
-# Branch protection for main branch - requires platform team approval
-# CODEOWNERS file enforces that platform team must approve all changes
+# Branch protection for main branch - requires at least one approval
+# Code owner reviews are not required
 resource "github_branch_protection" "main" {
   repository_id = githubx_repository.this.name
   pattern       = "main"
@@ -126,12 +98,13 @@ resource "github_branch_protection" "main" {
   required_pull_request_reviews {
     required_approving_review_count = 1
     dismiss_stale_reviews           = true
-    require_code_owner_reviews      = true # Requires CODEOWNERS approval
+    require_code_owner_reviews      = false # No code owner reviews required
   }
 
   depends_on = [
     githubx_repository.this,
     github_team_repository.platform,
+    github_team_repository.devops,
     githubx_repository_file.codeowners_main
   ]
 }
@@ -167,139 +140,242 @@ resource "githubx_repository_file" "atlantis_yaml" {
   }
 }
 
-# Backend configuration file
-resource "githubx_repository_file" "backend" {
+# Backend configuration file for dev environment
+resource "githubx_repository_file" "backend_dev" {
   repository = githubx_repository.this.name
   branch     = githubx_repository_branch.feature.branch
-  file       = "backend.tf"
+  file       = "dev/backend.tf"
   content = templatefile("${path.module}/external/backend.tftpl", {
     state_bucket_name = var.state_bucket_name
     repository_name   = var.repository_name
     region            = var.region
+    environment       = "dev"
   })
   commit_message      = <<-EOM
-    docs: add backend.tf
+    docs: add dev/backend.tf
 
-    Configure Terraform backend to use S3 for state storage
-    with state locking.
+    Configure Terraform backend for dev environment.
+    State key: ${var.repository_name}/dev/terraform.tfstate
   EOM
   overwrite_on_create = true
-
-  # Uncomment to allow manual edits without Terraform overwriting:
   lifecycle {
     ignore_changes = [content]
   }
-
   depends_on = [githubx_repository_file.atlantis_yaml]
 }
 
-# Example main.tf file
-resource "githubx_repository_file" "main_tf" {
+# Backend configuration file for prod environment
+resource "githubx_repository_file" "backend_prod" {
   repository = githubx_repository.this.name
   branch     = githubx_repository_branch.feature.branch
-  file       = "main.tf"
-  content = templatefile("${path.module}/external/main.tftpl", {
-    state_bucket_name = "${var.state_bucket_name}"
+  file       = "prod/backend.tf"
+  content = templatefile("${path.module}/external/backend.tftpl", {
+    state_bucket_name = var.state_bucket_name
+    repository_name   = var.repository_name
+    region            = var.region
+    environment       = "prod"
   })
   commit_message      = <<-EOM
-    feat: add example main.tf
+    docs: add prod/backend.tf
 
-    Add example S3 bucket resource for Atlantis demo.
+    Configure Terraform backend for prod environment.
+    State key: ${var.repository_name}/prod/terraform.tfstate
   EOM
   overwrite_on_create = true
-
-  # Uncomment to allow manual edits without Terraform overwriting:
   lifecycle {
     ignore_changes = [content]
   }
-
-  depends_on = [githubx_repository_file.backend]
+  depends_on = [githubx_repository_file.atlantis_yaml]
 }
 
-# Example variables.tf file
-resource "githubx_repository_file" "variables_tf" {
-  repository          = githubx_repository.this.name
-  branch              = githubx_repository_branch.feature.branch
-  file                = "variables.tf"
-  content             = file("${path.module}/external/variables.tftpl")
-  commit_message      = <<-EOM
-    feat: add example variables.tf
-
-    Add example variables file for Terraform configuration.
-  EOM
-  overwrite_on_create = true
-
-  # Uncomment to allow manual edits without Terraform overwriting:
-  lifecycle {
-    ignore_changes = [content]
-  }
-
-  depends_on = [githubx_repository_file.main_tf]
-}
-
-# Example versions.tf file
-resource "githubx_repository_file" "versions_tf" {
-  repository          = githubx_repository.this.name
-  branch              = githubx_repository_branch.feature.branch
-  file                = "versions.tf"
-  content             = file("${path.module}/external/versions.tftpl")
-  commit_message      = <<-EOM
-    feat: add versions.tf
-
-    Define Terraform and provider version requirements.
-  EOM
-  overwrite_on_create = true
-
-  # Uncomment to allow manual edits without Terraform overwriting:
-  lifecycle {
-    ignore_changes = [content]
-  }
-
-  depends_on = [githubx_repository_file.variables_tf]
-}
-
-# Example providers.tf file
-resource "githubx_repository_file" "providers_tf" {
+# Example main.tf file for dev environment
+resource "githubx_repository_file" "main_tf_dev" {
   repository = githubx_repository.this.name
   branch     = githubx_repository_branch.feature.branch
-  file       = "providers.tf"
+  file       = "dev/main.tf"
+  content = templatefile("${path.module}/external/main.tftpl", {
+    state_bucket_name = "${var.state_bucket_name}"
+    environment       = "dev"
+  })
+  commit_message      = <<-EOM
+    feat: add dev/main.tf
+
+    Add example S3 bucket resource for dev environment.
+  EOM
+  overwrite_on_create = true
+  lifecycle {
+    ignore_changes = [content]
+  }
+  depends_on = [githubx_repository_file.backend_dev]
+}
+
+# Example main.tf file for prod environment
+resource "githubx_repository_file" "main_tf_prod" {
+  repository = githubx_repository.this.name
+  branch     = githubx_repository_branch.feature.branch
+  file       = "prod/main.tf"
+  content = templatefile("${path.module}/external/main.tftpl", {
+    state_bucket_name = "${var.state_bucket_name}"
+    environment       = "prod"
+  })
+  commit_message      = <<-EOM
+    feat: add prod/main.tf
+
+    Add example S3 bucket resource for prod environment.
+  EOM
+  overwrite_on_create = true
+  lifecycle {
+    ignore_changes = [content]
+  }
+  depends_on = [githubx_repository_file.backend_prod]
+}
+
+# Example variables.tf file for dev environment
+resource "githubx_repository_file" "variables_tf_dev" {
+  repository          = githubx_repository.this.name
+  branch              = githubx_repository_branch.feature.branch
+  file                = "dev/variables.tf"
+  content             = file("${path.module}/external/variables.tftpl")
+  commit_message      = <<-EOM
+    feat: add dev/variables.tf
+
+    Add example variables file for dev environment.
+  EOM
+  overwrite_on_create = true
+  lifecycle {
+    ignore_changes = [content]
+  }
+  depends_on = [githubx_repository_file.main_tf_dev]
+}
+
+# Example variables.tf file for prod environment
+resource "githubx_repository_file" "variables_tf_prod" {
+  repository          = githubx_repository.this.name
+  branch              = githubx_repository_branch.feature.branch
+  file                = "prod/variables.tf"
+  content             = file("${path.module}/external/variables.tftpl")
+  commit_message      = <<-EOM
+    feat: add prod/variables.tf
+
+    Add example variables file for prod environment.
+  EOM
+  overwrite_on_create = true
+  lifecycle {
+    ignore_changes = [content]
+  }
+  depends_on = [githubx_repository_file.main_tf_prod]
+}
+
+# Example versions.tf file for dev environment
+resource "githubx_repository_file" "versions_tf_dev" {
+  repository          = githubx_repository.this.name
+  branch              = githubx_repository_branch.feature.branch
+  file                = "dev/versions.tf"
+  content             = file("${path.module}/external/versions.tftpl")
+  commit_message      = <<-EOM
+    feat: add dev/versions.tf
+
+    Define Terraform and provider version requirements for dev.
+  EOM
+  overwrite_on_create = true
+  lifecycle {
+    ignore_changes = [content]
+  }
+  depends_on = [githubx_repository_file.variables_tf_dev]
+}
+
+# Example versions.tf file for prod environment
+resource "githubx_repository_file" "versions_tf_prod" {
+  repository          = githubx_repository.this.name
+  branch              = githubx_repository_branch.feature.branch
+  file                = "prod/versions.tf"
+  content             = file("${path.module}/external/versions.tftpl")
+  commit_message      = <<-EOM
+    feat: add prod/versions.tf
+
+    Define Terraform and provider version requirements for prod.
+  EOM
+  overwrite_on_create = true
+  lifecycle {
+    ignore_changes = [content]
+  }
+  depends_on = [githubx_repository_file.variables_tf_prod]
+}
+
+# Example providers.tf file for dev environment
+resource "githubx_repository_file" "providers_tf_dev" {
+  repository = githubx_repository.this.name
+  branch     = githubx_repository_branch.feature.branch
+  file       = "dev/providers.tf"
   content = templatefile("${path.module}/external/providers.tftpl", {
     region = var.region
   })
   commit_message      = <<-EOM
-    feat: add providers.tf
+    feat: add dev/providers.tf
 
-    Configure AWS and random providers.
+    Configure AWS and random providers for dev.
   EOM
   overwrite_on_create = true
-
-  # Uncomment to allow manual edits without Terraform overwriting:
   lifecycle {
     ignore_changes = [content]
   }
-
-  depends_on = [githubx_repository_file.versions_tf]
+  depends_on = [githubx_repository_file.versions_tf_dev]
 }
 
-# Example outputs.tf file
-resource "githubx_repository_file" "outputs_tf" {
-  repository          = githubx_repository.this.name
-  branch              = githubx_repository_branch.feature.branch
-  file                = "outputs.tf"
-  content             = file("${path.module}/external/outputs.tftpl")
+# Example providers.tf file for prod environment
+resource "githubx_repository_file" "providers_tf_prod" {
+  repository = githubx_repository.this.name
+  branch     = githubx_repository_branch.feature.branch
+  file       = "prod/providers.tf"
+  content = templatefile("${path.module}/external/providers.tftpl", {
+    region = var.region
+  })
   commit_message      = <<-EOM
-    feat: add outputs.tf
+    feat: add prod/providers.tf
 
-    Add output for S3 bucket name.
+    Configure AWS and random providers for prod.
   EOM
   overwrite_on_create = true
-
-  # Uncomment to allow manual edits without Terraform overwriting:
   lifecycle {
     ignore_changes = [content]
   }
+  depends_on = [githubx_repository_file.versions_tf_prod]
+}
 
-  depends_on = [githubx_repository_file.providers_tf]
+# Example outputs.tf file for dev environment
+resource "githubx_repository_file" "outputs_tf_dev" {
+  repository          = githubx_repository.this.name
+  branch              = githubx_repository_branch.feature.branch
+  file                = "dev/outputs.tf"
+  content             = file("${path.module}/external/outputs.tftpl")
+  commit_message      = <<-EOM
+    feat: add dev/outputs.tf
+
+    Add output for S3 bucket name in dev.
+  EOM
+  overwrite_on_create = true
+  lifecycle {
+    ignore_changes = [content]
+  }
+  depends_on = [githubx_repository_file.providers_tf_dev]
+}
+
+# Example outputs.tf file for prod environment
+resource "githubx_repository_file" "outputs_tf_prod" {
+  repository          = githubx_repository.this.name
+  branch              = githubx_repository_branch.feature.branch
+  file                = "prod/outputs.tf"
+  content             = file("${path.module}/external/outputs.tftpl")
+  commit_message      = <<-EOM
+    feat: add prod/outputs.tf
+
+    Add output for S3 bucket name in prod.
+  EOM
+  overwrite_on_create = true
+  lifecycle {
+    ignore_changes = [content]
+  }
+  depends_on = [githubx_repository_file.providers_tf_prod]
 }
 
 resource "githubx_repository_pull_request_auto_merge" "auto_merge_pr" {
@@ -310,10 +386,10 @@ resource "githubx_repository_pull_request_auto_merge" "auto_merge_pr" {
   body               = <<-EOM
     This PR adds the initial Terraform configuration files for the Atlantis demo:
 
-    - Backend configuration (S3)
-    - Atlantis configuration
-    - Example S3 bucket resource
-    - Supporting files (variables, versions, providers, outputs)
+    - Backend configuration (S3) for dev and prod environments
+    - Atlantis configuration with directory-based structure
+    - Example S3 bucket resources for dev and prod
+    - Supporting files (variables, versions, providers, outputs) in dev/ and prod/ directories
 
     Ready for Atlantis to plan and apply.
   EOM
@@ -323,13 +399,19 @@ resource "githubx_repository_pull_request_auto_merge" "auto_merge_pr" {
   auto_delete_branch = true
 
   depends_on = [
-    githubx_repository_file.backend,
+    githubx_repository_file.backend_dev,
+    githubx_repository_file.backend_prod,
     githubx_repository_file.atlantis_yaml,
-    githubx_repository_file.main_tf,
-    githubx_repository_file.variables_tf,
-    githubx_repository_file.versions_tf,
-    githubx_repository_file.providers_tf,
-    githubx_repository_file.outputs_tf
+    githubx_repository_file.main_tf_dev,
+    githubx_repository_file.main_tf_prod,
+    githubx_repository_file.variables_tf_dev,
+    githubx_repository_file.variables_tf_prod,
+    githubx_repository_file.versions_tf_dev,
+    githubx_repository_file.versions_tf_prod,
+    githubx_repository_file.providers_tf_dev,
+    githubx_repository_file.providers_tf_prod,
+    githubx_repository_file.outputs_tf_dev,
+    githubx_repository_file.outputs_tf_prod
   ]
 }
 

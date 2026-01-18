@@ -119,46 +119,6 @@ variable "github_owner" {
   type        = string
 }
 
-variable "github_app_id" {
-  description = <<-EOT
-    GitHub App ID for Atlantis authentication.
-    Example: 123456
-
-    This is the App ID (not the Installation ID). You can find it in your GitHub App settings.
-
-    IMPORTANT: The GitHub App must be INSTALLED on your organization/repository
-    before Atlantis can use it. After creating the GitHub App, you must:
-    1. Go to https://github.com/settings/apps
-    2. Find your GitHub App and click "Install App"
-    3. Select your organization (or specific repositories)
-    4. Grant the necessary permissions
-
-    After installation, you must manually add the repository to the GitHub App installation
-    via the GitHub UI (managing installations requires organization OWNER role).
-
-    Without installation, Atlantis will fail with: "wrong number of installations, expected 1, found 0"
-    EOT
-  type        = number
-}
-
-variable "github_app_private_key" {
-  description = <<-EOT
-    GitHub App private key (PEM format) to store in Secrets Manager.
-    This is the full PEM-formatted private key, NOT the SHA256 fingerprint.
-    The private key is a multi-line string with BEGIN/END markers.
-    Example:
-    -----BEGIN RSA PRIVATE KEY-----
-    MIIEpAIBAAKCAQEA...
-    (multiple lines of base64-encoded key data)
-    -----END RSA PRIVATE KEY-----
-
-    Note: If you only see "SHA256:???????" that's the fingerprint, not the key.
-    Download the actual private key from your GitHub App settings.
-    EOT
-  type        = string
-  sensitive   = true
-}
-
 variable "github_webhook_secret" {
   description = <<-EOT
     GitHub webhook secret for Atlantis.
@@ -166,12 +126,6 @@ variable "github_webhook_secret" {
     EOT
   type        = string
   sensitive   = true
-}
-
-variable "demo_repo_name" {
-  description = "Name of the demo GitHub repository"
-  type        = string
-  default     = "atlantis-terraform-aws"
 }
 
 variable "s3_enable_versioning" {

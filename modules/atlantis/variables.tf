@@ -69,54 +69,40 @@ variable "bitwarden_auth_token_secret_key" {
   default     = "token"
 }
 
+# Bitwarden secret IDs - used to sync secrets from Bitwarden to Kubernetes
+# These are the only references to secrets in Terraform (no secret values passed)
 variable "github_app_id_secret_id" {
   type        = string
-  description = "Bitwarden secret ID for GitHub App ID"
+  description = "Bitwarden secret ID for GitHub App ID (used to sync secret to Kubernetes)"
 }
 
 variable "github_app_private_key_secret_id" {
   type        = string
-  description = "Bitwarden secret ID for GitHub App private key"
+  description = "Bitwarden secret ID for GitHub App private key (used to sync secret to Kubernetes)"
 }
 
 variable "github_webhook_secret_id" {
   type        = string
-  description = "Bitwarden secret ID for GitHub webhook secret"
+  description = "Bitwarden secret ID for GitHub webhook secret (used to sync secret to Kubernetes)"
 }
 
+# Kubernetes secret names - used to reference secrets synced from Bitwarden
+# The secret name is also used as the key name within the secret
 variable "github_app_id_secret_name" {
   type        = string
-  description = "Name of the Kubernetes secret containing GitHub App ID (synced from Bitwarden)"
-  default     = "github-app-id"
-}
-
-variable "github_app_id_secret_key" {
-  type        = string
-  description = "Key name in the GitHub App ID secret"
+  description = "Name of the Kubernetes secret containing GitHub App ID (synced from Bitwarden). Also used as the key name within the secret."
   default     = "github-app-id"
 }
 
 variable "github_app_private_key_secret_name" {
   type        = string
-  description = "Name of the Kubernetes secret containing GitHub App private key (synced from Bitwarden)"
-  default     = "github-app-private-key"
-}
-
-variable "github_app_private_key_secret_key" {
-  type        = string
-  description = "Key name in the GitHub App private key secret"
+  description = "Name of the Kubernetes secret containing GitHub App private key (synced from Bitwarden). Also used as the key name within the secret."
   default     = "github-app-private-key"
 }
 
 variable "github_webhook_secret_name" {
   type        = string
-  description = "Name of the Kubernetes secret containing GitHub webhook secret (synced from Bitwarden)"
-  default     = "github-webhook-secret"
-}
-
-variable "github_webhook_secret_key" {
-  type        = string
-  description = "Key name in the GitHub webhook secret"
+  description = "Name of the Kubernetes secret containing GitHub webhook secret (synced from Bitwarden). Also used as the key name within the secret."
   default     = "github-webhook-secret"
 }
 

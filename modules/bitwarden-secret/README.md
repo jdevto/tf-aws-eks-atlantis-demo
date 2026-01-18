@@ -19,7 +19,7 @@ module "bitwarden_secret_example" {
   name            = "example-secret"
   namespace       = "bitwarden-secrets"
   organization_id = "your-org-id"
-  secret_id      = "ca058f55-8898-4fbc-99d8-b3cc016b31ac"
+  secret_id      = "00000000-0000-0000-0000-000000000000"
   key_name       = "demo-secret-key"
 
   # access_token_secret_name defaults to "bitwarden-auth-token" (matches bitwarden module)
@@ -36,7 +36,7 @@ module "bitwarden_secrets" {
   source = "./modules/bitwarden-secret"
   for_each = {
     example-secret = {
-      secret_id = "ca058f55-8898-4fbc-99d8-b3cc016b31ac"
+      secret_id = "00000000-0000-0000-0000-000000000000"
       key_name  = "demo-secret-key"
     }
     api-key = {

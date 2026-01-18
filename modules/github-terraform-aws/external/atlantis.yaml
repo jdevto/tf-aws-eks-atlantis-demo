@@ -1,11 +1,26 @@
 version: 3
 projects:
-  - name: s3-demo
-    dir: .
+  - name: terraform-aws-dev
+    dir: dev/ # Directory-based, not workspace
+    workflow: atlantis-terraform-aws-dev-workflow # References server-side workflow
     autoplan:
       enabled: true
       when_modified:
-        - "*.tf"
+        - "**/*.tf"
+        - "dev/**"
         - "atlantis.yaml"
     apply_requirements:
-      - approved
+      - approved # PR must be approved before apply
+
+  - name: terraform-aws-prod
+    dir: prod/ # Directory-based, not workspace
+    workflow: atlantis-terraform-aws-prod-workflow # References server-side workflow
+    autoplan:
+      enabled: true
+      when_modified:
+        - "**/*.tf"
+        - "prod/**"
+        - "atlantis.yaml"
+    apply_requirements:
+      - approved # PR must be approved
+      - mergeable # PR must be mergeable (all checks pass)

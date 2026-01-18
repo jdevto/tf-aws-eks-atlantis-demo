@@ -1,19 +1,5 @@
 # TODO
 
-## Chart Improvements
-
-- [ ] **Update Bitwarden Reader Helm chart** to support path prefix configuration natively
-  - Add `basePath` or `pathPrefix` configuration option to the chart
-  - Support subpath deployment without requiring nginx proxy workaround
-  - Handle HTML/JS/CSS path rewriting and WebSocket connections at the application level
-  - This would eliminate the need for the nginx proxy deployment, config, and service (currently in `modules/bitwarden-reader/main.tf`)
-
-- [ ] **Update Atlantis Helm chart** to support path prefix configuration natively
-  - Add `basePath` or `pathPrefix` configuration option to the chart
-  - Support subpath deployment without requiring nginx proxy workaround
-  - Handle path rewriting at the application level
-  - This would eliminate the need for the nginx proxy deployment, config, and service (currently in `modules/atlantis/nginx.tf`)
-
 ## Authentication & Authorization
 
 - [ ] **Implement AWS Cognito authentication for shared ALB**
@@ -45,3 +31,10 @@
   - Configure project-scoped permissions for DevOps role
   - Set default policy to `role:readonly` for conservative access
   - Ensure Cognito groups are included in OIDC token claims
+
+- [ ] **Evaluate and configure Atlantis policies**
+  - Review current Atlantis server-side configuration and workflows
+  - Evaluate policy enforcement options (e.g., OPA, Sentinel, custom policies)
+  - Configure policy checks in Atlantis workflows (if needed)
+  - Test policy enforcement for dev and prod environments
+  - Document policy requirements and enforcement rules

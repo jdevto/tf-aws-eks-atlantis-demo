@@ -80,19 +80,25 @@ resource "kubectl_manifest" "atlantis_nginx_config" {
     }
     data = {
       "default.conf" = <<-EOT
+        resolver kube-dns.kube-system.svc.cluster.local valid=10s;
+
         server {
           listen 80;
 
           # Rewrite path prefix to /* before proxying to Atlantis
           location ${var.atlantis_path_prefix}/ {
+            set $atlantis_upstream "atlantis.${var.atlantis_namespace}.svc.cluster.local:80";
             rewrite ^${var.atlantis_path_prefix}/(.*)$ /$1 break;
-            proxy_pass http://atlantis:80;
+            proxy_pass http://$atlantis_upstream;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Forwarded-Prefix ${var.atlantis_path_prefix};
+            proxy_connect_timeout 60s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
           }
 
           # Redirect path prefix without trailing slash to path with trailing slash

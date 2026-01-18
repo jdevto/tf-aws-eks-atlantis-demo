@@ -23,17 +23,6 @@ variable "github_owner" {
   type        = string
 }
 
-variable "github_app_id" {
-  description = "GitHub App ID to install on the organization"
-  type        = number
-}
-
-variable "github_app_private_key" {
-  description = "GitHub App private key (PEM format) for creating PRs via workflow"
-  type        = string
-  sensitive   = true
-}
-
 variable "github_webhook_secret" {
   description = "GitHub webhook secret for Atlantis (used to verify webhook payloads)"
   type        = string
