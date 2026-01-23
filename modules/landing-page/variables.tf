@@ -38,22 +38,19 @@ variable "shared_alb_security_group_id" {
   description = "Security group ID for shared ALB with IP restrictions. If provided, will be attached to the ALB."
 }
 
-variable "argocd_path_prefix" {
+variable "argocd_url" {
   type        = string
-  default     = "/argocd"
-  description = "Path prefix for ArgoCD links in the landing page"
+  description = "Full URL for ArgoCD (e.g., https://argocd.dev.geonet.cloud)"
 }
 
-variable "atlantis_path_prefix" {
+variable "atlantis_url" {
   type        = string
-  default     = "/atlantis"
-  description = "Path prefix for Atlantis links in the landing page"
+  description = "Full URL for Atlantis (e.g., https://atlantis.dev.geonet.cloud)"
 }
 
-variable "bitwarden_reader_path_prefix" {
+variable "bitwarden_reader_url" {
   type        = string
-  default     = "/reader"
-  description = "Path prefix for Bitwarden Reader links in the landing page"
+  description = "Full URL for Bitwarden Reader (e.g., https://reader.dev.geonet.cloud)"
 }
 
 variable "favicon_path" {

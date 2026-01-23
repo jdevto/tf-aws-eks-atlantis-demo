@@ -124,7 +124,7 @@ resource "kubectl_manifest" "atlantis_application" {
               }
 
               # Atlantis URL for webhooks and external access
-              atlantisUrl = var.enable_https ? "https://platform.${var.domain_name}${var.atlantis_path_prefix}" : "http://platform.${var.domain_name}${var.atlantis_path_prefix}"
+              atlantisUrl = var.enable_https ? "https://atlantis.${var.domain_name}" : "http://atlantis.${var.domain_name}"
 
               # Server-side repository configuration
               # Defines custom workflows and repo-specific rules for team-based access control
@@ -196,7 +196,11 @@ resource "kubectl_manifest" "atlantis_application" {
 
               extraArgs = [
                 "--default-tf-version=${var.default_tf_version}",
-                "--write-git-creds"
+                "--write-git-creds",
+                "--enable-policy-checks"
+                # Note: automerge is configured at repo level in atlantis.yaml
+                # The --automerge flag can be used as a global fallback, but repo-level
+                # config in atlantis.yaml takes priority (see https://www.runatlantis.io/docs/automerging)
               ]
             }
           })

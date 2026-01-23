@@ -1,0 +1,83 @@
+# =============================================================================
+# Example terraform.tfvars file with fictitious values
+# Copy this file to terraform.tfvars and update with your actual values
+# =============================================================================
+
+# AWS Configuration
+region        = "us-east-1"
+cluster_name  = "my-eks-cluster"
+cluster_version = "1.28"
+
+# Domain Configuration
+domain_name = "example.com"
+enable_https = true
+certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789012"
+
+# GitHub Configuration
+github_owner          = "my-org"
+github_webhook_secret = "your-secure-webhook-secret-here-change-me"
+
+# Git Repository Configuration (for ArgoCD)
+repo_url       = "https://github.com/my-org/my-app-repo.git"
+target_revision = "main"
+
+# EBS CSI Driver
+enable_ebs_csi_driver = true
+
+# Bitwarden Configuration
+bitwarden_enable              = true
+bitwarden_organization_id     = "12345678-1234-1234-1234-123456789012"
+bitwarden_access_token        = "your-bitwarden-access-token-here"
+bitwarden_secrets = {
+  "github-app-id"          = "12345678-1234-1234-1234-123456789012"
+  "github-app-private-key" = "87654321-4321-4321-4321-210987654321"
+  "github-webhook-secret"  = "abcdef12-3456-7890-abcd-ef1234567890"
+  "database-password"      = "fedcba09-8765-4321-0fed-cba098765432"
+}
+bitwarden_reader_secret_names = ["github-app-id", "github-app-private-key"]
+bitwarden_operator_helm_version = "1.0.0"
+bitwarden_bw_secrets_manager_refresh_interval = 300
+bitwarden_manager_image_tag = ""
+bitwarden_replicas = 1
+bitwarden_update_strategy = "RollingUpdate"
+
+# Shared ALB Configuration
+enable_shared_alb = true
+shared_alb_allowed_ips = [
+  "203.0.113.0/24",  # Example office network
+  "198.51.100.0/24", # Example VPN network
+]
+
+# S3 Configuration
+s3_enable_versioning = true
+s3_force_destroy     = false
+
+# AWS Auth Configuration (for Kubernetes access)
+aws_auth_map_users = [
+  {
+    userarn  = "arn:aws:iam::123456789012:user/admin"
+    username = "admin"
+    groups   = ["system:masters"]
+  },
+  {
+    userarn  = "arn:aws:iam::123456789012:user/developer"
+    username = "developer"
+    groups   = ["system:authenticated"]
+  }
+]
+
+aws_auth_map_roles = [
+  {
+    rolearn  = "arn:aws:iam::123456789012:role/eks-admin-role"
+    username = "eks-admin"
+    groups   = ["system:masters"]
+  }
+]
+
+# Common Tags
+tags = {
+  Environment = "production"
+  Project     = "my-project"
+  ManagedBy   = "terraform"
+  Owner       = "devops-team"
+}

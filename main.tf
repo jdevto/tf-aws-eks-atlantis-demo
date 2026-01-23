@@ -44,17 +44,6 @@ module "eks" {
   shared_alb_allowed_ips = var.shared_alb_allowed_ips
 }
 
-module "route53_platform" {
-  source = "./modules/route53"
-
-  count = var.enable_shared_alb ? 1 : 0
-
-  name         = "platform" # Creates: platform.example.com
-  domain_name  = var.domain_name
-  alb_dns_name = module.eks.shared_alb_dns_name
-  alb_zone_id  = module.eks.shared_alb_zone_id
-}
-
 # Landing Page Module
 module "landing_page" {
   source = "./modules/landing-page"
@@ -68,12 +57,61 @@ module "landing_page" {
   certificate_arn               = var.enable_https ? var.certificate_arn : ""
   ssl_redirect                  = var.enable_https
 
-  # Path prefixes for service links
-  argocd_path_prefix           = "/argocd"
-  atlantis_path_prefix         = "/atlantis"
-  bitwarden_reader_path_prefix = "/reader"
+  # URLs for service links
+  argocd_url           = var.enable_https ? "https://argocd.${var.domain_name}" : "http://argocd.${var.domain_name}"
+  atlantis_url         = var.enable_https ? "https://atlantis.${var.domain_name}" : "http://atlantis.${var.domain_name}"
+  bitwarden_reader_url = var.enable_https ? "https://reader.${var.domain_name}" : "http://reader.${var.domain_name}"
 
   depends_on = [module.eks]
+}
+
+module "route53_platform" {
+  source = "./modules/route53"
+
+  count = var.enable_shared_alb ? 1 : 0
+
+  name         = "platform" # Creates: platform.example.com
+  domain_name  = var.domain_name
+  alb_dns_name = module.eks.shared_alb_dns_name
+  alb_zone_id  = module.eks.shared_alb_zone_id
+
+  depends_on = [
+    module.eks,
+    module.landing_page,
+  ]
+}
+
+module "route53_atlantis" {
+  source = "./modules/route53"
+
+  count = var.enable_shared_alb ? 1 : 0
+
+  name         = "atlantis" # Creates: atlantis.dev.geonet.cloud
+  domain_name  = var.domain_name
+  alb_dns_name = module.eks.shared_alb_dns_name
+  alb_zone_id  = module.eks.shared_alb_zone_id
+
+  depends_on = [
+    module.eks,
+    module.route53_platform,
+  ]
+}
+
+module "route53_argocd" {
+  source = "./modules/route53"
+
+  count = var.enable_shared_alb ? 1 : 0
+
+  name         = "argocd" # Creates: argocd.dev.geonet.cloud
+  domain_name  = var.domain_name
+  alb_dns_name = module.eks.shared_alb_dns_name
+  alb_zone_id  = module.eks.shared_alb_zone_id
+
+  depends_on = [
+    module.eks,
+    module.route53_platform,
+    module.route53_atlantis,
+  ]
 }
 
 # ArgoCD Module
@@ -89,6 +127,12 @@ module "argocd" {
   shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
   shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
   domain_name                   = var.domain_name
+
+  depends_on = [
+    module.eks,
+    module.landing_page,
+    module.route53_argocd,
+  ]
 }
 
 # Bitwarden Secrets Manager Module
@@ -142,40 +186,40 @@ module "bitwarden_secrets" {
   ]
 }
 
-# Bitwarden Reader Demo Web App
-# Demonstrates reading secrets synced from Bitwarden to Kubernetes
-module "bitwarden_reader" {
-  source = "./modules/bitwarden-reader"
+# # Bitwarden Reader Demo Web App
+# # Demonstrates reading secrets synced from Bitwarden to Kubernetes
+# module "bitwarden_reader" {
+#   source = "./modules/bitwarden-reader"
 
-  namespace = module.bitwarden.secrets_namespace
-  secret_names = var.bitwarden_reader_secret_names != null ? var.bitwarden_reader_secret_names : (
-    [for name, module in module.bitwarden_secrets : module.kubernetes_secret_name]
-  )
+#   namespace = module.bitwarden.secrets_namespace
+#   secret_names = var.bitwarden_reader_secret_names != null ? var.bitwarden_reader_secret_names : (
+#     [for name, module in module.bitwarden_secrets : module.kubernetes_secret_name]
+#   )
 
-  # Shared ALB configuration
-  shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
-  shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
-  subnet_ids                    = module.vpc.public_subnet_ids
-  path_prefix                   = "/reader"
+#   # Shared ALB configuration
+#   shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
+#   shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
+#   subnet_ids                    = module.vpc.public_subnet_ids
+#   domain_name                   = var.domain_name
 
-  # HTTPS configuration
-  enable_https    = var.enable_https
-  certificate_arn = var.enable_https ? var.certificate_arn : ""
-  ssl_redirect    = var.enable_https
+#   # HTTPS configuration
+#   enable_https    = var.enable_https
+#   certificate_arn = var.enable_https ? var.certificate_arn : ""
+#   ssl_redirect    = var.enable_https
 
-  # ArgoCD configuration
-  argocd_namespace = module.argocd.argocd_namespace
+#   # ArgoCD configuration
+#   argocd_namespace = module.argocd.argocd_namespace
 
-  tags = local.common_tags
+#   tags = local.common_tags
 
-  depends_on = [
-    module.vpc,
-    module.eks,
-    module.argocd,
-    module.bitwarden,
-    module.bitwarden_secrets
-  ]
-}
+#   depends_on = [
+#     module.vpc,
+#     module.eks,
+#     module.argocd,
+#     module.bitwarden,
+#     module.bitwarden_secrets
+#   ]
+# }
 
 # Atlantis Module
 module "atlantis" {
@@ -215,7 +259,8 @@ module "atlantis" {
   depends_on = [
     module.argocd,
     module.bitwarden,
-    module.bitwarden_secrets
+    module.bitwarden_secrets,
+    module.route53_atlantis
   ]
 }
 
@@ -226,19 +271,19 @@ module "github_terraform_aws" {
   repository_name       = "atlantis-terraform-aws"
   github_owner          = var.github_owner
   github_webhook_secret = var.github_webhook_secret
-  atlantis_url          = "https://platform.${var.domain_name}/atlantis"
+  atlantis_url          = var.enable_https ? "https://atlantis.${var.domain_name}" : "http://atlantis.${var.domain_name}"
   state_bucket_name     = module.s3-backend.state_bucket_name
   region                = var.region
 }
 
-# # GitHub Terraform GitHub Module
+# # GitHub Terraform GitHub Module (commented out - not currently used)
 # module "github_terraform_github" {
 #   source = "./modules/github-terraform-github"
-
+#
 #   repository_name       = "atlantis-terraform-github"
 #   github_owner          = var.github_owner
 #   github_webhook_secret = var.github_webhook_secret
-#   atlantis_url          = "https://platform.${var.domain_name}/atlantis"
+#   atlantis_url          = var.enable_https ? "https://atlantis.${var.domain_name}" : "http://atlantis.${var.domain_name}"
 #   state_bucket_name     = module.s3-backend.state_bucket_name
 #   region                = var.region
 # }

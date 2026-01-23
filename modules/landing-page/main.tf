@@ -13,9 +13,9 @@ resource "kubernetes_config_map" "landing_page" {
   data = merge(
     {
       "index.html" = templatefile("${path.module}/templates/landing-page.html", {
-        argocd_path_prefix           = var.argocd_path_prefix
-        atlantis_path_prefix         = var.atlantis_path_prefix
-        bitwarden_reader_path_prefix = var.bitwarden_reader_path_prefix
+        argocd_url           = var.argocd_url
+        atlantis_url         = var.atlantis_url
+        bitwarden_reader_url = var.bitwarden_reader_url
       })
     },
     # Add favicon if provided, otherwise use default from templates directory

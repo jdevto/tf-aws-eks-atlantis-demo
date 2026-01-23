@@ -13,7 +13,7 @@ output "service_name" {
   value       = var.enable ? var.app_name : null
 }
 
-output "path_prefix" {
-  description = "Path prefix for accessing the reader app"
-  value       = var.path_prefix
+output "url" {
+  description = "Full URL for accessing the reader app"
+  value       = var.enable && var.shared_alb_ingress_group_name != "" ? try("http://reader.${var.domain_name}", null) : null
 }

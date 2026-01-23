@@ -128,216 +128,7 @@ resource "kubectl_manifest" "bitwarden_reader_application" {
   ]
 }
 
-# Nginx proxy for path rewriting
-# Rewrites /reader/* to /* before proxying to bitwarden-reader service
-resource "kubectl_manifest" "bitwarden_reader_nginx_proxy" {
-  count = var.enable && var.shared_alb_ingress_group_name != "" ? 1 : 0
-
-  yaml_body = yamlencode({
-    apiVersion = "apps/v1"
-    kind       = "Deployment"
-    metadata = {
-      name      = "${var.app_name}-nginx-proxy"
-      namespace = var.namespace
-      labels = {
-        app = "${var.app_name}-nginx-proxy"
-      }
-    }
-    spec = {
-      replicas = 1
-      selector = {
-        matchLabels = {
-          app = "${var.app_name}-nginx-proxy"
-        }
-      }
-      template = {
-        metadata = {
-          labels = {
-            app = "${var.app_name}-nginx-proxy"
-          }
-        }
-        spec = {
-          containers = [
-            {
-              name  = "nginx"
-              image = "nginx:alpine"
-              ports = [
-                {
-                  containerPort = 80
-                  name          = "http"
-                }
-              ]
-              volumeMounts = [
-                {
-                  name      = "nginx-config"
-                  mountPath = "/etc/nginx/conf.d"
-                }
-              ]
-            }
-          ]
-          volumes = [
-            {
-              name = "nginx-config"
-              configMap = {
-                name = "${var.app_name}-nginx-proxy-config"
-              }
-            }
-          ]
-        }
-      }
-    }
-  })
-
-  depends_on = [kubectl_manifest.bitwarden_reader_application[0]]
-}
-
-# Nginx configuration for path rewriting
-resource "kubectl_manifest" "bitwarden_reader_nginx_config" {
-  count = var.enable && var.shared_alb_ingress_group_name != "" ? 1 : 0
-
-  yaml_body = yamlencode({
-    apiVersion = "v1"
-    kind       = "ConfigMap"
-    metadata = {
-      name      = "${var.app_name}-nginx-proxy-config"
-      namespace = var.namespace
-    }
-    data = {
-      "default.conf" = <<-EOT
-        server {
-          listen 80;
-
-          # Catch /api requests (from JavaScript constructing absolute URLs) and proxy directly
-          # API calls can't be redirected, so we proxy directly to backend /api
-          location /api/ {
-            proxy_pass http://${var.app_name}:8080;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header X-Forwarded-Host $host;
-            proxy_set_header X-Forwarded-Prefix ${var.path_prefix};
-            proxy_read_timeout 30;
-          }
-
-          # Catch /ws requests (from JavaScript constructing absolute URLs) and proxy directly
-          # WebSocket connections can't be redirected, so we proxy directly to backend /ws
-          location = /ws {
-            proxy_pass http://${var.app_name}:8080;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header X-Forwarded-Host $host;
-            proxy_read_timeout 86400;
-          }
-
-          # WebSocket endpoint - must be before the general location block
-          location ${var.path_prefix}/ws {
-            rewrite ^${var.path_prefix}/ws(.*)$ /ws$1 break;
-            proxy_pass http://${var.app_name}:8080;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header X-Forwarded-Host $host;
-            proxy_read_timeout 86400;
-          }
-
-          # Rewrite path prefix to /* before proxying to bitwarden-reader
-          location ${var.path_prefix}/ {
-            rewrite ^${var.path_prefix}/(.*)$ /$1 break;
-            proxy_pass http://${var.app_name}:8080;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header X-Forwarded-Host $host;
-            proxy_set_header X-Forwarded-Prefix ${var.path_prefix};
-
-            # WebSocket support
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_read_timeout 86400;
-
-            # Enable buffering for sub_filter to work
-            proxy_buffering on;
-            proxy_buffer_size 4k;
-            proxy_buffers 8 4k;
-            proxy_busy_buffers_size 8k;
-
-            # Rewrite HTML/JS content to fix absolute paths in CSS/JS/API references
-            sub_filter 'href="/' 'href="${var.path_prefix}/';
-            sub_filter "href='/" "href='${var.path_prefix}/";
-            sub_filter 'src="/' 'src="${var.path_prefix}/';
-            sub_filter "src='/" "src='${var.path_prefix}/";
-            sub_filter 'action="/' 'action="${var.path_prefix}/';
-            sub_filter "action='/" "action='${var.path_prefix}/";
-            # Rewrite API URLs in JavaScript
-            sub_filter '"/api/' '"${var.path_prefix}/api/';
-            sub_filter "'/api/" "'${var.path_prefix}/api/";
-            sub_filter '"/api"' '"${var.path_prefix}/api';
-            sub_filter "'/api'" "'${var.path_prefix}/api";
-            sub_filter_once off;
-            sub_filter_types text/html text/css text/javascript application/javascript application/json text/plain;
-          }
-
-          # Redirect path prefix without trailing slash to path with trailing slash
-          location = ${var.path_prefix} {
-            return 301 ${var.path_prefix}/;
-          }
-        }
-      EOT
-    }
-  })
-
-  depends_on = [kubectl_manifest.bitwarden_reader_application[0]]
-}
-
-# Service for nginx proxy
-resource "kubectl_manifest" "bitwarden_reader_nginx_service" {
-  count = var.enable && var.shared_alb_ingress_group_name != "" ? 1 : 0
-
-  yaml_body = yamlencode({
-    apiVersion = "v1"
-    kind       = "Service"
-    metadata = {
-      name      = "${var.app_name}-nginx-proxy"
-      namespace = var.namespace
-      labels = {
-        app = "${var.app_name}-nginx-proxy"
-      }
-    }
-    spec = {
-      type = "ClusterIP"
-      ports = [
-        {
-          port       = 80
-          targetPort = 80
-          protocol   = "TCP"
-          name       = "http"
-        }
-      ]
-      selector = {
-        app = "${var.app_name}-nginx-proxy"
-      }
-    }
-  })
-
-  depends_on = [
-    kubectl_manifest.bitwarden_reader_nginx_proxy[0],
-    kubectl_manifest.bitwarden_reader_nginx_config[0]
-  ]
-}
-
-# Ingress resource for Bitwarden Reader using shared ALB
+# Ingress resource for Bitwarden Reader using shared ALB with host-based routing
 resource "kubectl_manifest" "bitwarden_reader_ingress" {
   count = var.enable && var.shared_alb_ingress_group_name != "" ? 1 : 0
 
@@ -353,8 +144,9 @@ resource "kubectl_manifest" "bitwarden_reader_ingress" {
           "alb.ingress.kubernetes.io/target-type"      = "ip"
           "alb.ingress.kubernetes.io/subnets"          = join(",", var.subnet_ids)
           "alb.ingress.kubernetes.io/backend-protocol" = "HTTP"
-          "alb.ingress.kubernetes.io/healthcheck-path" = "${var.path_prefix}/api/v1/health"
+          "alb.ingress.kubernetes.io/healthcheck-path" = "/api/v1/health"
           "alb.ingress.kubernetes.io/group.name"       = var.shared_alb_ingress_group_name
+          "alb.ingress.kubernetes.io/order"            = "10"
         },
         # Security group for IP restrictions (if provided)
         var.shared_alb_security_group_id != "" ? {
@@ -380,76 +172,17 @@ resource "kubectl_manifest" "bitwarden_reader_ingress" {
       ingressClassName = "alb"
       rules = [
         {
+          host = "reader.${var.domain_name}"
           http = {
             paths = [
               {
-                path     = "/api"
+                path     = "/"
                 pathType = "Prefix"
                 backend = {
                   service = {
-                    name = "${var.app_name}-nginx-proxy"
+                    name = var.app_name
                     port = {
-                      number = 80
-                    }
-                  }
-                }
-              },
-              {
-                path     = "/ws"
-                pathType = "Exact"
-                backend = {
-                  service = {
-                    name = "${var.app_name}-nginx-proxy"
-                    port = {
-                      number = 80
-                    }
-                  }
-                }
-              },
-              {
-                path     = "${var.path_prefix}/api/v1/health"
-                pathType = "Exact"
-                backend = {
-                  service = {
-                    name = "${var.app_name}-nginx-proxy"
-                    port = {
-                      number = 80
-                    }
-                  }
-                }
-              },
-              {
-                path     = "${var.path_prefix}/ws"
-                pathType = "Prefix"
-                backend = {
-                  service = {
-                    name = "${var.app_name}-nginx-proxy"
-                    port = {
-                      number = 80
-                    }
-                  }
-                }
-              },
-              {
-                path     = "${var.path_prefix}/api"
-                pathType = "Prefix"
-                backend = {
-                  service = {
-                    name = "${var.app_name}-nginx-proxy"
-                    port = {
-                      number = 80
-                    }
-                  }
-                }
-              },
-              {
-                path     = var.path_prefix
-                pathType = "Prefix"
-                backend = {
-                  service = {
-                    name = "${var.app_name}-nginx-proxy"
-                    port = {
-                      number = 80
+                      number = 8080
                     }
                   }
                 }
@@ -462,7 +195,7 @@ resource "kubectl_manifest" "bitwarden_reader_ingress" {
   })
 
   depends_on = [
-    kubectl_manifest.bitwarden_reader_nginx_service[0]
+    kubectl_manifest.bitwarden_reader_application[0]
   ]
 }
 

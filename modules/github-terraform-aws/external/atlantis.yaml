@@ -1,4 +1,8 @@
 version: 3
+# Automerge: After apply succeeds, automatically merge the PR
+# Note: This does NOT auto-apply - someone still needs to comment "atlantis apply"
+# To auto-apply on PR approval, use GitHub Actions to comment "atlantis apply" when PR is approved
+automerge: true
 projects:
   - name: terraform-aws-dev
     dir: dev/ # Directory-based, not workspace
@@ -11,6 +15,7 @@ projects:
         - "atlantis.yaml"
     apply_requirements:
       - approved # PR must be approved before apply
+      # Note: automerge will merge PR after apply succeeds, but apply still requires manual "atlantis apply" comment
 
   - name: terraform-aws-prod
     dir: prod/ # Directory-based, not workspace
@@ -24,3 +29,5 @@ projects:
     apply_requirements:
       - approved # PR must be approved
       - mergeable # PR must be mergeable (all checks pass)
+      # Note: automerge will merge PR after apply succeeds
+      # The workflow includes a team check (only platform team can apply to prod)

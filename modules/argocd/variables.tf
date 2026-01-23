@@ -56,9 +56,3 @@ variable "shared_alb_security_group_id" {
   default     = ""
   description = "Security group ID for shared ALB with IP restrictions. Empty if IP restrictions are not configured."
 }
-
-variable "argocd_path_prefix" {
-  type        = string
-  default     = "/argocd"
-  description = "Path prefix for ArgoCD (e.g., /argocd). Used for ingress paths and health checks."
-}

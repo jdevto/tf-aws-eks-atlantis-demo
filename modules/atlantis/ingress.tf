@@ -2,7 +2,7 @@
 # INGRESS
 # ============================================================================
 # Creates AWS ALB Ingress for external access to Atlantis
-# Uses shared ALB with path prefix support
+# Uses shared ALB with host-based routing
 
 resource "kubectl_manifest" "atlantis_ingress" {
   yaml_body = yamlencode({
@@ -17,7 +17,7 @@ resource "kubectl_manifest" "atlantis_ingress" {
           "alb.ingress.kubernetes.io/target-type"      = "ip"
           "alb.ingress.kubernetes.io/subnets"          = join(",", var.subnet_ids)
           "alb.ingress.kubernetes.io/backend-protocol" = "HTTP"
-          "alb.ingress.kubernetes.io/healthcheck-path" = "${var.atlantis_path_prefix}/healthz"
+          "alb.ingress.kubernetes.io/healthcheck-path" = "/healthz"
           "alb.ingress.kubernetes.io/group.name"       = var.shared_alb_ingress_group_name
         },
         # Security group for IP restrictions (if provided)
@@ -44,14 +44,15 @@ resource "kubectl_manifest" "atlantis_ingress" {
       ingressClassName = "alb"
       rules = [
         {
+          host = "atlantis.${var.domain_name}"
           http = {
             paths = [
               {
-                path     = var.atlantis_path_prefix
+                path     = "/"
                 pathType = "Prefix"
                 backend = {
                   service = {
-                    name = "atlantis-nginx-proxy"
+                    name = "atlantis"
                     port = {
                       number = 80
                     }
@@ -67,7 +68,6 @@ resource "kubectl_manifest" "atlantis_ingress" {
 
   depends_on = [
     kubernetes_namespace.atlantis,
-    kubectl_manifest.atlantis_application,
-    kubectl_manifest.atlantis_nginx_service
+    kubectl_manifest.atlantis_application
   ]
 }

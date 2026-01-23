@@ -38,3 +38,10 @@
   - Configure policy checks in Atlantis workflows (if needed)
   - Test policy enforcement for dev and prod environments
   - Document policy requirements and enforcement rules
+
+tf auto apply on merge?
+tf auto apply on approve?
+
+prevent. check if merge but not apply yet?
+
+not allow /16

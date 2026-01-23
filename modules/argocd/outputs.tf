@@ -26,8 +26,8 @@ output "argocd_server_url" {
     try(
       length(data.kubernetes_ingress_v1.argocd_server.status[0].load_balancer[0].ingress) > 0 ? (
         try(
-          "http://${data.kubernetes_ingress_v1.argocd_server.status[0].load_balancer[0].ingress[0].hostname}/argocd",
-          "http://${data.kubernetes_ingress_v1.argocd_server.status[0].load_balancer[0].ingress[0].ip}/argocd"
+          "http://${data.kubernetes_ingress_v1.argocd_server.status[0].load_balancer[0].ingress[0].hostname}",
+          "http://${data.kubernetes_ingress_v1.argocd_server.status[0].load_balancer[0].ingress[0].ip}"
         )
       ) : null,
       null
@@ -35,5 +35,5 @@ output "argocd_server_url" {
     # Fallback message when Ingress status is not populated
     "ALB URL not in Ingress status yet. Run: aws elbv2 describe-load-balancers --region ${var.aws_region} --query 'LoadBalancers[?contains(LoadBalancerName, `k8s-${var.shared_alb_ingress_group_name}`)].DNSName' --output text"
   )
-  description = "ArgoCD server ALB URL (HTTP, insecure mode enabled, accessible at /argocd path). If showing a command, Ingress status is not populated yet."
+  description = "ArgoCD server ALB URL (HTTP, insecure mode enabled, using host-based routing). If showing a command, Ingress status is not populated yet."
 }

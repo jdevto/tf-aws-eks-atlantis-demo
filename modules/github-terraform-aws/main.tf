@@ -32,7 +32,7 @@ data "github_team" "platform" {
 resource "github_team_repository" "platform" {
   team_id    = data.github_team.platform.id
   repository = githubx_repository.this.name
-  permission = "push" # Push permission allows team members to review and approve PRs
+  permission = "maintain" # Maintain permission allows team members to review and approve PRs
 }
 
 # Grant devops team access to the repository
@@ -48,7 +48,8 @@ resource "github_team_repository" "devops" {
 }
 
 # CODEOWNERS file to require platform team approval
-# Add to main branch first (required for branch protection)
+# Add to main branch (required for branch protection)
+# Created first to establish .github directory structure
 resource "githubx_repository_file" "codeowners_main" {
   repository = githubx_repository.this.name
   branch     = githubx_repository.this.default_branch
@@ -70,24 +71,32 @@ resource "githubx_repository_file" "codeowners_main" {
   depends_on = [githubx_repository.this]
 }
 
-# GitHub Actions workflow to create PRs manually
-resource "githubx_repository_file" "create_pr_workflow_main" {
-  repository          = githubx_repository.this.name
-  branch              = githubx_repository.this.default_branch
-  file                = ".github/workflows/create-pr.yml"
-  content             = file("${path.module}/external/create-pr.yml")
-  commit_message      = <<-EOM
-    feat: add workflow to create PRs
+# # GitHub Actions workflow to create PRs manually
+# # Created after CODEOWNERS to ensure .github directory exists
+# # NOTE: The GitHub API cannot create files in nested directories that don't exist.
+# # The .github/workflows directory must be created manually first (e.g., via git or web UI),
+# # or this resource will fail with 404. Once the directory exists, this resource will work.
+# resource "githubx_repository_file" "create_pr_workflow_main" {
+#   repository          = githubx_repository.this.name
+#   branch              = githubx_repository.this.default_branch
+#   file                = ".github/workflows/create-pr.yml"
+#   content             = file("${path.module}/external/create-pr.yml")
+#   commit_message      = <<-EOM
+#     feat: add workflow to create PRs
 
-    Add GitHub Actions workflow for manually creating pull requests.
-  EOM
-  overwrite_on_create = true
+#     Add GitHub Actions workflow for manually creating pull requests.
+#   EOM
+#   overwrite_on_create = true
 
-  lifecycle {
-    ignore_changes = [content]
-  }
-  depends_on = [githubx_repository_file.codeowners_main]
-}
+#   lifecycle {
+#     ignore_changes = [content]
+#   }
+
+#   depends_on = [
+#     githubx_repository.this,
+#     githubx_repository_file.codeowners_main
+#   ]
+# }
 
 # Branch protection for main branch - requires at least one approval
 # Code owner reviews are not required
