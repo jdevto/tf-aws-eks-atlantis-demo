@@ -24,11 +24,9 @@ module "s3-backend" {
 module "eks" {
   source = "./modules/eks"
 
-  cluster_name                  = local.cluster_name
-  cluster_version               = var.cluster_version
-  enable_ebs_csi_driver         = var.enable_ebs_csi_driver
-  enable_shared_alb             = var.enable_shared_alb
-  shared_alb_ingress_group_name = var.enable_shared_alb ? "platform" : ""
+  cluster_name          = local.cluster_name
+  cluster_version       = var.cluster_version
+  enable_ebs_csi_driver = var.enable_ebs_csi_driver
   # Cluster control plane can use both public and private subnets
   subnet_ids = concat(module.vpc.private_subnet_ids, module.vpc.public_subnet_ids)
   # Node groups should be in private subnets only for security
@@ -36,12 +34,34 @@ module "eks" {
   vpc_id          = module.vpc.vpc_id
   tags            = local.common_tags
 
-  # AWS Auth ConfigMap - map IAM users and roles for Kubernetes access
-  aws_auth_map_users = var.aws_auth_map_users
-  aws_auth_map_roles = var.aws_auth_map_roles
+  # Enable Pod Identity Agent for AWS SDK credentials in pods
+  enable_pod_identity_agent = var.enable_pod_identity_agent
 
-  # Shared ALB IP restrictions
-  shared_alb_allowed_ips = var.shared_alb_allowed_ips
+  # Cluster admin access entries
+  cluster_admin_arns = var.cluster_admin_arns
+
+  # Cluster authentication mode
+  cluster_authentication_mode = var.cluster_authentication_mode
+
+  depends_on = [module.vpc]
+}
+
+# Shared ALB Module
+module "shared_alb" {
+  source = "./modules/shared-alb"
+
+  enable             = var.enable_shared_alb
+  name               = local.cluster_name
+  cluster_name       = module.eks.cluster_name
+  vpc_id             = module.vpc.vpc_id
+  ingress_group_name = "platform"
+  allowed_ips        = var.shared_alb_allowed_ips
+  tags               = local.common_tags
+
+  depends_on = [
+    module.vpc,
+    module.eks
+  ]
 }
 
 # Landing Page Module
@@ -51,16 +71,30 @@ module "landing_page" {
   count = var.enable_shared_alb ? 1 : 0
 
   subnet_ids                    = module.vpc.public_subnet_ids
-  shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
-  shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
+  shared_alb_ingress_group_name = module.shared_alb.ingress_group_name
+  shared_alb_security_group_id  = module.shared_alb.security_group_id
   enable_https                  = var.enable_https
   certificate_arn               = var.enable_https ? var.certificate_arn : ""
   ssl_redirect                  = var.enable_https
 
-  # URLs for service links
-  argocd_url           = var.enable_https ? "https://argocd.${var.domain_name}" : "http://argocd.${var.domain_name}"
-  atlantis_url         = var.enable_https ? "https://atlantis.${var.domain_name}" : "http://atlantis.${var.domain_name}"
-  bitwarden_reader_url = var.enable_https ? "https://reader.${var.domain_name}" : "http://reader.${var.domain_name}"
+  # Services to display on landing page
+  services = [
+    {
+      name        = "ArgoCD"
+      url         = var.enable_https ? "https://argocd.${var.domain_name}" : "http://argocd.${var.domain_name}"
+      description = "GitOps continuous delivery tool for Kubernetes. Manage your applications declaratively with automated sync and rollback capabilities."
+    },
+    {
+      name        = "Atlantis"
+      url         = var.enable_https ? "https://atlantis.${var.domain_name}" : "http://atlantis.${var.domain_name}"
+      description = "Terraform automation via pull requests. Review and apply infrastructure changes safely through your Git workflow."
+    },
+    {
+      name        = "Bitwarden Reader"
+      url         = var.enable_https ? "https://reader.${var.domain_name}" : "http://reader.${var.domain_name}"
+      description = "Demo web interface to view secrets synced from Bitwarden Secrets Manager to Kubernetes."
+    }
+  ]
 
   depends_on = [module.eks]
 }
@@ -72,8 +106,8 @@ module "route53_platform" {
 
   name         = "platform" # Creates: platform.example.com
   domain_name  = var.domain_name
-  alb_dns_name = module.eks.shared_alb_dns_name
-  alb_zone_id  = module.eks.shared_alb_zone_id
+  alb_dns_name = module.shared_alb.dns_name
+  alb_zone_id  = module.shared_alb.zone_id
 
   depends_on = [
     module.eks,
@@ -88,8 +122,8 @@ module "route53_atlantis" {
 
   name         = "atlantis" # Creates: atlantis.dev.geonet.cloud
   domain_name  = var.domain_name
-  alb_dns_name = module.eks.shared_alb_dns_name
-  alb_zone_id  = module.eks.shared_alb_zone_id
+  alb_dns_name = module.shared_alb.dns_name
+  alb_zone_id  = module.shared_alb.zone_id
 
   depends_on = [
     module.eks,
@@ -104,8 +138,8 @@ module "route53_argocd" {
 
   name         = "argocd" # Creates: argocd.dev.geonet.cloud
   domain_name  = var.domain_name
-  alb_dns_name = module.eks.shared_alb_dns_name
-  alb_zone_id  = module.eks.shared_alb_zone_id
+  alb_dns_name = module.shared_alb.dns_name
+  alb_zone_id  = module.shared_alb.zone_id
 
   depends_on = [
     module.eks,
@@ -124,8 +158,8 @@ module "argocd" {
   enable_https                  = var.enable_https
   certificate_arn               = var.certificate_arn
   ssl_redirect                  = var.enable_https
-  shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
-  shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
+  shared_alb_ingress_group_name = module.shared_alb.ingress_group_name
+  shared_alb_security_group_id  = module.shared_alb.security_group_id
   domain_name                   = var.domain_name
 
   depends_on = [
@@ -186,41 +220,6 @@ module "bitwarden_secrets" {
   ]
 }
 
-# # Bitwarden Reader Demo Web App
-# # Demonstrates reading secrets synced from Bitwarden to Kubernetes
-# module "bitwarden_reader" {
-#   source = "./modules/bitwarden-reader"
-
-#   namespace = module.bitwarden.secrets_namespace
-#   secret_names = var.bitwarden_reader_secret_names != null ? var.bitwarden_reader_secret_names : (
-#     [for name, module in module.bitwarden_secrets : module.kubernetes_secret_name]
-#   )
-
-#   # Shared ALB configuration
-#   shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
-#   shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
-#   subnet_ids                    = module.vpc.public_subnet_ids
-#   domain_name                   = var.domain_name
-
-#   # HTTPS configuration
-#   enable_https    = var.enable_https
-#   certificate_arn = var.enable_https ? var.certificate_arn : ""
-#   ssl_redirect    = var.enable_https
-
-#   # ArgoCD configuration
-#   argocd_namespace = module.argocd.argocd_namespace
-
-#   tags = local.common_tags
-
-#   depends_on = [
-#     module.vpc,
-#     module.eks,
-#     module.argocd,
-#     module.bitwarden,
-#     module.bitwarden_secrets
-#   ]
-# }
-
 # Atlantis Module
 module "atlantis" {
   source = "./modules/atlantis"
@@ -252,8 +251,8 @@ module "atlantis" {
   github_webhook_secret_name         = "dev-github-webhook-secret"
 
   state_bucket_name             = module.s3-backend.state_bucket_name
-  shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
-  shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
+  shared_alb_ingress_group_name = module.shared_alb.ingress_group_name
+  shared_alb_security_group_id  = module.shared_alb.security_group_id
   argocd_namespace              = "argocd" # Must match the namespace where ArgoCD is installed
 
   depends_on = [

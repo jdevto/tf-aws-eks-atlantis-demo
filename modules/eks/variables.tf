@@ -108,15 +108,6 @@ variable "aws_lb_controller_helm_version" {
   default     = "1.7.2"
 }
 
-variable "aws_lb_controller_helm_values" {
-  description = "Additional Helm values for the AWS Load Balancer Controller (not supported by external module, kept for compatibility)"
-  type        = map(string)
-  default     = {}
-  # Note: The external module doesn't support custom Helm values, but we keep this variable
-  # for backward compatibility. If needed, we can extend the external module or create
-  # a separate Helm release resource.
-}
-
 variable "enable_ebs_csi_driver" {
   description = "Whether to install AWS EBS CSI Driver"
   type        = bool
@@ -129,45 +120,30 @@ variable "ebs_csi_driver_version" {
   default     = null # Uses latest version
 }
 
+variable "enable_pod_identity_agent" {
+  description = "Whether to enable the EKS Pod Identity Agent addon"
+  type        = bool
+  default     = false
+}
+
+variable "cluster_admin_arns" {
+  description = "List of IAM user/role ARNs to grant cluster admin access via EKS access entries"
+  type        = list(string)
+  default     = []
+}
+
+variable "cluster_authentication_mode" {
+  description = "Authentication mode for the EKS cluster. Valid values: CONFIG_MAP, API, API_AND_CONFIG_MAP. Defaults to API_AND_CONFIG_MAP when capabilities are enabled, otherwise CONFIG_MAP."
+  type        = string
+  default     = "API_AND_CONFIG_MAP"
+
+  validation {
+    condition     = contains(["CONFIG_MAP", "API", "API_AND_CONFIG_MAP"], var.cluster_authentication_mode)
+    error_message = "cluster_authentication_mode must be one of: CONFIG_MAP, API, API_AND_CONFIG_MAP"
+  }
+}
+
 variable "tags" {
   type    = map(string)
   default = {}
-}
-
-variable "enable_shared_alb" {
-  type        = bool
-  default     = false
-  description = "Enable shared ALB functionality. When true, sets up data sources and outputs for shared ALB discovery."
-}
-
-variable "shared_alb_ingress_group_name" {
-  type        = string
-  default     = "shared-alb"
-  description = "Name of the ingress group for shared ALB. All ingresses with this group name will share the same ALB. Only used when enable_shared_alb is true."
-}
-
-variable "aws_auth_map_users" {
-  type = list(object({
-    userarn  = string
-    username = string
-    groups   = list(string)
-  }))
-  default     = []
-  description = "List of IAM users to add to aws-auth ConfigMap for Kubernetes access"
-}
-
-variable "aws_auth_map_roles" {
-  type = list(object({
-    rolearn  = string
-    username = string
-    groups   = list(string)
-  }))
-  default     = []
-  description = "List of IAM roles to add to aws-auth ConfigMap for Kubernetes access"
-}
-
-variable "shared_alb_allowed_ips" {
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
-  description = "List of CIDR blocks allowed to access the shared ALB. If empty, all IPs are allowed. Example: [\"1.2.3.4/32\", \"10.0.0.0/8\"]"
 }

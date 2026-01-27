@@ -38,19 +38,14 @@ variable "shared_alb_security_group_id" {
   description = "Security group ID for shared ALB with IP restrictions. If provided, will be attached to the ALB."
 }
 
-variable "argocd_url" {
-  type        = string
-  description = "Full URL for ArgoCD (e.g., https://argocd.dev.geonet.cloud)"
-}
-
-variable "atlantis_url" {
-  type        = string
-  description = "Full URL for Atlantis (e.g., https://atlantis.dev.geonet.cloud)"
-}
-
-variable "bitwarden_reader_url" {
-  type        = string
-  description = "Full URL for Bitwarden Reader (e.g., https://reader.dev.geonet.cloud)"
+variable "services" {
+  type = list(object({
+    name        = string
+    url         = string
+    description = string
+  }))
+  description = "List of services to display on the landing page. Each service should have a name, URL, and description."
+  default     = []
 }
 
 variable "favicon_path" {
