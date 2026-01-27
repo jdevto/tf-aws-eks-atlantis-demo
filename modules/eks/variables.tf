@@ -109,9 +109,12 @@ variable "aws_lb_controller_helm_version" {
 }
 
 variable "aws_lb_controller_helm_values" {
-  description = "Additional Helm values for the AWS Load Balancer Controller"
+  description = "Additional Helm values for the AWS Load Balancer Controller (not supported by external module, kept for compatibility)"
   type        = map(string)
   default     = {}
+  # Note: The external module doesn't support custom Helm values, but we keep this variable
+  # for backward compatibility. If needed, we can extend the external module or create
+  # a separate Helm release resource.
 }
 
 variable "enable_ebs_csi_driver" {

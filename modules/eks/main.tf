@@ -7,99 +7,41 @@ data "aws_vpc" "this" {
 }
 
 # =============================================================================
-# EKS (native resources)
+# EKS Cluster using external module
 # =============================================================================
 
-# Cluster IAM role
-data "aws_iam_policy_document" "eks_cluster_assume_role" {
-  statement {
-    effect = "Allow"
+module "eks" {
+  source = "github.com/tfstack/terraform-aws-eks-basic?ref=main"
 
-    principals {
-      type        = "Service"
-      identifiers = ["eks.amazonaws.com"]
-    }
+  cluster_name    = var.cluster_name
+  cluster_version = var.cluster_version
+  vpc_id          = var.vpc_id
+  subnet_ids      = var.subnet_ids
+  node_subnet_ids = var.node_subnet_ids != null ? var.node_subnet_ids : var.subnet_ids
 
-    actions = ["sts:AssumeRole"]
-  }
-}
-
-resource "aws_iam_role" "eks_cluster" {
-  name               = "${var.cluster_name}-eks-cluster-role"
-  assume_role_policy = data.aws_iam_policy_document.eks_cluster_assume_role.json
-  tags               = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
-  role       = aws_iam_role.eks_cluster.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
-}
-
-# Node IAM role
-data "aws_iam_policy_document" "eks_nodes_assume_role" {
-  statement {
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["ec2.amazonaws.com"]
-    }
-
-    actions = ["sts:AssumeRole"]
-  }
-}
-
-resource "aws_iam_role" "eks_nodes" {
-  name               = "${var.cluster_name}-eks-nodes-role"
-  assume_role_policy = data.aws_iam_policy_document.eks_nodes_assume_role.json
-  tags               = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "eks_nodes_worker" {
-  role       = aws_iam_role.eks_nodes.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-}
-
-resource "aws_iam_role_policy_attachment" "eks_nodes_cni" {
-  role       = aws_iam_role.eks_nodes.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-}
-
-resource "aws_iam_role_policy_attachment" "eks_nodes_ecr" {
-  role       = aws_iam_role.eks_nodes.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-}
-
-# EKS control plane
-resource "aws_eks_cluster" "this" {
-  name     = var.cluster_name
-  version  = var.cluster_version
-  role_arn = aws_iam_role.eks_cluster.arn
-
-  vpc_config {
-    subnet_ids              = var.subnet_ids
-    endpoint_public_access  = var.endpoint_public_access
-    endpoint_private_access = true
-    # Restrict public endpoint access to specific CIDRs (optional but recommended for security)
-    public_access_cidrs = var.public_access_cidrs
-  }
-
-  # Enable control plane logging for audit and troubleshooting
+  endpoint_public_access    = var.endpoint_public_access
+  public_access_cidrs       = var.public_access_cidrs
   enabled_cluster_log_types = var.enabled_cluster_log_types
 
-  tags = var.tags
+  # Node group configuration
+  node_instance_types                = var.node_instance_types
+  node_desired_size                  = var.node_desired_size
+  node_min_size                      = var.node_min_size
+  node_max_size                      = var.node_max_size
+  node_disk_size                     = var.node_disk_size
+  node_update_max_unavailable        = var.node_update_max_unavailable
+  node_remote_access_enabled         = var.node_remote_access_enabled
+  node_remote_access_ssh_key         = var.node_remote_access_ssh_key
+  node_remote_access_security_groups = var.node_remote_access_security_groups
+  node_labels                        = var.node_labels
 
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_cluster_policy,
-  ]
-}
+  # AWS Auth ConfigMap
+  aws_auth_map_users = var.aws_auth_map_users
+  aws_auth_map_roles = var.aws_auth_map_roles
 
-# Managed node group
-resource "aws_eks_node_group" "default" {
-  cluster_name    = aws_eks_cluster.this.name
-  node_group_name = "${var.cluster_name}-default"
-  node_role_arn   = aws_iam_role.eks_nodes.arn
-  subnet_ids      = var.node_subnet_ids != null ? var.node_subnet_ids : var.subnet_ids
+  # Addons
+  enable_ebs_csi_driver  = var.enable_ebs_csi_driver
+  ebs_csi_driver_version = var.ebs_csi_driver_version
 
   instance_types = var.node_instance_types
 
@@ -315,239 +257,30 @@ resource "aws_eks_addon" "ebs_csi_driver" {
   tags = var.tags
 }
 
-# Default StorageClass for EBS CSI Driver
-resource "kubernetes_storage_class" "ebs_csi_default" {
-  count = var.enable_ebs_csi_driver ? 1 : 0
-
-  metadata {
-    name = "gp3"
-    annotations = {
-      "storageclass.kubernetes.io/is-default-class" = "true"
-    }
-  }
-
-  storage_provisioner    = "ebs.csi.aws.com"
-  volume_binding_mode    = "WaitForFirstConsumer"
-  allow_volume_expansion = true
-
-  parameters = {
-    type   = "gp3"
-    fsType = "ext4"
-  }
-
-  depends_on = [
-    aws_eks_addon.ebs_csi_driver[0]
-  ]
-}
-
 # =============================================================================
-# AWS Load Balancer Controller IAM (IRSA setup)
-# Note: Kubernetes resources are created at root level to avoid provider cycles
+# Shared ALB Functionality (Custom - not in external module)
 # =============================================================================
 
-# OIDC provider for IRSA
-data "tls_certificate" "eks" {
-  url = aws_eks_cluster.this.identity[0].oidc[0].issuer
-}
-
-resource "aws_iam_openid_connect_provider" "eks" {
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
-  url             = aws_eks_cluster.this.identity[0].oidc[0].issuer
-
-  tags = var.tags
-}
-
-# IAM role for AWS Load Balancer Controller
-data "aws_iam_policy_document" "aws_lb_controller_assume_role" {
-  statement {
-    effect = "Allow"
-
-    principals {
-      type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.eks.arn]
-    }
-
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:sub"
-      values   = ["system:serviceaccount:kube-system:aws-load-balancer-controller"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:aud"
-      values   = ["sts.amazonaws.com"]
-    }
-  }
-}
-
-resource "aws_iam_role" "aws_lb_controller" {
-  name               = "${var.cluster_name}-aws-lb-controller"
-  assume_role_policy = data.aws_iam_policy_document.aws_lb_controller_assume_role.json
-  tags               = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "aws_lb_controller" {
-  role       = aws_iam_role.aws_lb_controller.name
-  policy_arn = "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess"
-}
-
-resource "aws_iam_role_policy_attachment" "aws_lb_controller_ec2" {
-  role       = aws_iam_role.aws_lb_controller.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
-}
-
-resource "aws_iam_role_policy" "aws_lb_controller_waf" {
-  name = "${var.cluster_name}-aws-lb-controller-waf"
-  role = aws_iam_role.aws_lb_controller.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "WAFv2Permissions"
-        Effect = "Allow"
-        Action = [
-          "wafv2:GetWebACL",
-          "wafv2:GetWebACLForResource",
-          "wafv2:AssociateWebACL",
-          "wafv2:DisassociateWebACL",
-          "wafv2:ListWebACLs"
-        ]
-        Resource = "*"
-      },
-      {
-        Sid    = "WAFRegionalPermissions"
-        Effect = "Allow"
-        Action = [
-          "waf-regional:GetWebACL",
-          "waf-regional:GetWebACLForResource",
-          "waf-regional:AssociateWebACL",
-          "waf-regional:DisassociateWebACL",
-          "waf-regional:ListWebACLs"
-        ]
-        Resource = "*"
-      },
-      {
-        Sid    = "ShieldPermissions"
-        Effect = "Allow"
-        Action = [
-          "shield:GetSubscriptionState",
-          "shield:DescribeProtection",
-          "shield:CreateProtection",
-          "shield:DeleteProtection"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-# =============================================================================
-# AWS Load Balancer Controller Installation
-# =============================================================================
-
-# Kubernetes Service Account for AWS Load Balancer Controller
-resource "kubernetes_service_account" "aws_lb_controller" {
-  count = var.enable_aws_lb_controller ? 1 : 0
-
-  metadata {
-    name      = "aws-load-balancer-controller"
-    namespace = "kube-system"
-    annotations = {
-      "eks.amazonaws.com/role-arn" = aws_iam_role.aws_lb_controller.arn
-    }
-    labels = {
-      "app.kubernetes.io/name"       = "aws-load-balancer-controller"
-      "app.kubernetes.io/component"  = "controller"
-      "app.kubernetes.io/managed-by" = "terraform"
-    }
-  }
-
-  depends_on = [
-    aws_eks_cluster.this,
-    aws_eks_node_group.default,
-    aws_iam_role_policy_attachment.aws_lb_controller,
-    aws_iam_role_policy_attachment.aws_lb_controller_ec2,
-    aws_iam_role_policy.aws_lb_controller_waf
-  ]
-}
-
-# Helm Release for AWS Load Balancer Controller
-resource "helm_release" "aws_load_balancer_controller" {
-  count = var.enable_aws_lb_controller ? 1 : 0
-
-  name       = "aws-load-balancer-controller"
-  repository = "https://aws.github.io/eks-charts"
-  chart      = "aws-load-balancer-controller"
-  namespace  = "kube-system"
-  version    = var.aws_lb_controller_helm_version
-
-  set {
-    name  = "clusterName"
-    value = aws_eks_cluster.this.name
-  }
-
-  set {
-    name  = "serviceAccount.create"
-    value = "false"
-  }
-
-  set {
-    name  = "serviceAccount.name"
-    value = "aws-load-balancer-controller"
-  }
-
-  set {
-    name  = "region"
-    value = data.aws_region.current.region
-  }
-
-  set {
-    name  = "vpcId"
-    value = var.vpc_id
-  }
-
-  dynamic "set" {
-    for_each = var.aws_lb_controller_helm_values
-    content {
-      name  = set.key
-      value = set.value
-    }
-  }
-
-  depends_on = [
-    kubernetes_service_account.aws_lb_controller[0],
-    aws_eks_node_group.default
-  ]
-}
-
+# Get the shared ALB created by AWS Load Balancer Controller
+# Using a static key to avoid for_each issues with unknown values
 data "aws_lbs" "shared_alb" {
   count = var.enable_shared_alb && var.shared_alb_ingress_group_name != "" ? 1 : 0
 
   tags = {
-    "elbv2.k8s.aws/cluster" = aws_eks_cluster.this.name
+    "elbv2.k8s.aws/cluster" = module.eks.cluster_name
     "ingress.k8s.aws/stack" = var.shared_alb_ingress_group_name
   }
 
   depends_on = [
-    helm_release.aws_load_balancer_controller
+    module.eks
   ]
 }
 
 locals {
-  shared_alb_arns_list = var.enable_shared_alb && var.shared_alb_ingress_group_name != "" ? try(
-    tolist(data.aws_lbs.shared_alb[0].arns),
-    []
-  ) : []
-  shared_alb_arn = length(local.shared_alb_arns_list) > 0 ? local.shared_alb_arns_list[0] : ""
-
-  shared_alb_for_each_map = var.enable_shared_alb && var.shared_alb_ingress_group_name != "" && try(local.shared_alb_arn, "") != "" ? {
-    shared = local.shared_alb_arn
-  } : {}
+  # Get the first ALB ARN if available
+  # Convert set to list first, then get first element
+  shared_alb_arns_list = var.enable_shared_alb && var.shared_alb_ingress_group_name != "" && length(try(data.aws_lbs.shared_alb[0].arns, [])) > 0 ? tolist(data.aws_lbs.shared_alb[0].arns) : []
+  shared_alb_arn       = length(local.shared_alb_arns_list) > 0 ? local.shared_alb_arns_list[0] : null
 
   # Merge VPC CIDR with allowed IPs
   # VPC CIDR is always included for internal ALB health checks and internal traffic
@@ -558,9 +291,10 @@ locals {
   )) : []
 }
 
+# Get ALB details (using conditional to avoid for_each with unknown values)
 data "aws_lb" "shared_alb_details" {
-  for_each = local.shared_alb_for_each_map
-  arn      = each.value
+  count = local.shared_alb_arn != null ? 1 : 0
+  arn   = local.shared_alb_arn
 }
 
 # =============================================================================
@@ -666,12 +400,13 @@ data "aws_security_groups" "node_security_groups" {
     values = [var.vpc_id]
   }
 
-  depends_on = [aws_eks_node_group.default]
+  depends_on = [module.eks]
 }
 
 # Allow traffic from ALB security group to node security groups
 # This allows the ALB to perform health checks and forward traffic to pods
 # Note: We allow all TCP ports (0-65535) to cover all possible service ports
+# Using a static map with known keys to avoid for_each issues with unknown values
 resource "aws_security_group_rule" "node_from_alb" {
   for_each = try(toset(data.aws_security_groups.node_security_groups[0].ids), toset([]))
 
