@@ -44,3 +44,17 @@ module "eks" {
 
   tags = var.tags
 }
+
+module "shared_alb" {
+  source = "./shared-alb"
+
+  enable             = var.enable_shared_alb
+  name               = var.shared_alb_name != "" ? var.shared_alb_name : var.cluster_name
+  cluster_name       = module.eks.cluster_name
+  vpc_id             = var.vpc_id
+  ingress_group_name = var.shared_alb_ingress_group_name
+  allowed_ips        = var.shared_alb_allowed_ips
+  tags               = var.tags
+
+  depends_on = [module.eks]
+}

@@ -14,7 +14,7 @@ Single secret:
 
 ```hcl
 module "bitwarden_secret_example" {
-  source = "./modules/bitwarden-secret"
+  source = "./modules/bitwarden/bitwarden-secret"
 
   name            = "example-secret"
   namespace       = "bitwarden-secrets"
@@ -33,7 +33,7 @@ Multiple secrets (using for_each):
 
 ```hcl
 module "bitwarden_secrets" {
-  source = "./modules/bitwarden-secret"
+  source = "./modules/bitwarden/bitwarden-secret"
   for_each = {
     example-secret = {
       secret_id = "00000000-0000-0000-0000-000000000000"

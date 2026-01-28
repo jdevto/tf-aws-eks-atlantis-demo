@@ -147,3 +147,28 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+# Shared ALB configuration
+variable "enable_shared_alb" {
+  description = "Enable shared ALB functionality"
+  type        = bool
+  default     = false
+}
+
+variable "shared_alb_ingress_group_name" {
+  description = "Name of the ingress group for shared ALB. All ingresses with this group name will share the same ALB."
+  type        = string
+  default     = ""
+}
+
+variable "shared_alb_allowed_ips" {
+  description = "List of CIDR blocks allowed to access the shared ALB. If empty, all IPs are allowed."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "shared_alb_name" {
+  description = "Name prefix for shared ALB resources (e.g., cluster name)"
+  type        = string
+  default     = ""
+}

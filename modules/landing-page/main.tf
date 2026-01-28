@@ -62,6 +62,28 @@ resource "kubernetes_deployment" "landing_page" {
             container_port = 80
           }
 
+          liveness_probe {
+            http_get {
+              path = "/"
+              port = 80
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 10
+            timeout_seconds       = 5
+            failure_threshold     = 3
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/"
+              port = 80
+            }
+            initial_delay_seconds = 5
+            period_seconds        = 5
+            timeout_seconds       = 3
+            failure_threshold     = 3
+          }
+
           volume_mount {
             name       = "html"
             mount_path = "/usr/share/nginx/html"
@@ -123,11 +145,18 @@ resource "kubernetes_ingress_v1" "landing_page" {
     namespace = var.namespace
     annotations = merge(
       {
-        "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
-        "alb.ingress.kubernetes.io/target-type"      = "ip"
-        "alb.ingress.kubernetes.io/subnets"          = join(",", var.subnet_ids)
-        "alb.ingress.kubernetes.io/backend-protocol" = "HTTP"
-        "alb.ingress.kubernetes.io/group.name"       = var.shared_alb_ingress_group_name
+        "alb.ingress.kubernetes.io/scheme"                                = "internet-facing"
+        "alb.ingress.kubernetes.io/target-type"                           = "ip"
+        "alb.ingress.kubernetes.io/subnets"                               = join(",", var.subnet_ids)
+        "alb.ingress.kubernetes.io/backend-protocol"                      = "HTTP"
+        "alb.ingress.kubernetes.io/healthcheck-path"                      = "/"
+        "alb.ingress.kubernetes.io/healthcheck-port"                      = "traffic-port"
+        "alb.ingress.kubernetes.io/healthcheck-protocol"                  = "HTTP"
+        "alb.ingress.kubernetes.io/healthcheck-interval-seconds"          = "30"
+        "alb.ingress.kubernetes.io/healthcheck-timeout-seconds"           = "10"
+        "alb.ingress.kubernetes.io/healthcheck-healthy-threshold-count"   = "2"
+        "alb.ingress.kubernetes.io/healthcheck-unhealthy-threshold-count" = "5"
+        "alb.ingress.kubernetes.io/group.name"                            = var.shared_alb_ingress_group_name
         # Set order to ensure root path is handled correctly
         "alb.ingress.kubernetes.io/order" = "1"
       },
@@ -173,7 +202,7 @@ resource "kubernetes_ingress_v1" "landing_page" {
         # Root path (must be last to avoid conflicts)
         path {
           path      = "/"
-          path_type = "Exact"
+          path_type = "Prefix"
           backend {
             service {
               name = kubernetes_service.landing_page.metadata[0].name
@@ -186,4 +215,18 @@ resource "kubernetes_ingress_v1" "landing_page" {
       }
     }
   }
+}
+
+# Route53 record for landing page
+module "route53" {
+  source = "../route53"
+
+  name         = var.route53_name
+  domain_name  = var.domain_name
+  alb_dns_name = var.alb_dns_name
+  alb_zone_id  = var.alb_zone_id
+
+  depends_on = [
+    kubernetes_ingress_v1.landing_page
+  ]
 }

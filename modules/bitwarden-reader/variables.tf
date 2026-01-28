@@ -59,7 +59,7 @@ variable "shared_alb_security_group_id" {
 }
 
 variable "domain_name" {
-  description = "Domain name for the reader app (e.g., dev.geonet.cloud). Used to construct the full hostname."
+  description = "Domain name for the reader app (e.g., example.com). Used to construct the full hostname."
   type        = string
 }
 

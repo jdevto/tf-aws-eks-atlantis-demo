@@ -53,3 +53,26 @@ variable "favicon_path" {
   default     = null
   description = "Path to favicon.svg file. If null, a default favicon will be used. Path should be relative to the module directory."
 }
+
+variable "domain_name" {
+  type        = string
+  description = "Domain name for Route53 record"
+}
+
+variable "alb_dns_name" {
+  type        = string
+  description = "DNS name of the Application Load Balancer"
+  default     = ""
+}
+
+variable "alb_zone_id" {
+  type        = string
+  description = "Zone ID of the Application Load Balancer"
+  default     = ""
+}
+
+variable "route53_name" {
+  type        = string
+  default     = "platform"
+  description = "Name for the Route53 record (e.g., 'platform' creates platform.example.com)"
+}

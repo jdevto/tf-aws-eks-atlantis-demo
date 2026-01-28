@@ -31,7 +31,7 @@ output "argocd_password" {
 output "platform_url" {
   description = "Platform URL with protocol (http:// or https://)"
   value = var.enable_shared_alb ? (
-    var.enable_https ? "https://${module.route53_platform[0].custom_domain}" : "http://${module.route53_platform[0].custom_domain}"
+    var.enable_https ? "https://${module.landing_page[0].custom_domain}" : "http://${module.landing_page[0].custom_domain}"
   ) : ""
 }
 

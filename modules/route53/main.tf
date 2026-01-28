@@ -22,9 +22,4 @@ resource "aws_route53_record" "this" {
     zone_id                = var.alb_zone_id
     evaluate_target_health = true
   }
-
-  # Allow the record to be destroyed even if ALB values become empty
-  lifecycle {
-    create_before_destroy = true
-  }
 }

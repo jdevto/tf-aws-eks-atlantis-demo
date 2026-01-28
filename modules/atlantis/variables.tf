@@ -140,3 +140,21 @@ variable "atlantis_namespace" {
   default     = "atlantis"
   description = "Kubernetes namespace where Atlantis will be deployed"
 }
+
+variable "alb_dns_name" {
+  type        = string
+  description = "DNS name of the Application Load Balancer"
+  default     = ""
+}
+
+variable "alb_zone_id" {
+  type        = string
+  description = "Zone ID of the Application Load Balancer"
+  default     = ""
+}
+
+variable "route53_name" {
+  type        = string
+  default     = "atlantis"
+  description = "Name for the Route53 record (e.g., 'atlantis' creates atlantis.example.com)"
+}

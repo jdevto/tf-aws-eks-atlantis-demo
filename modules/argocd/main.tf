@@ -68,12 +68,18 @@ resource "kubernetes_ingress_v1" "argocd" {
     namespace = var.namespace
     annotations = merge(
       {
-        "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
-        "alb.ingress.kubernetes.io/target-type"      = "ip"
-        "alb.ingress.kubernetes.io/subnets"          = join(",", var.subnet_ids)
-        "alb.ingress.kubernetes.io/backend-protocol" = "HTTP"
-        "alb.ingress.kubernetes.io/healthcheck-path" = "/healthz"
-        "alb.ingress.kubernetes.io/group.name"       = var.shared_alb_ingress_group_name
+        "alb.ingress.kubernetes.io/scheme"                                = "internet-facing"
+        "alb.ingress.kubernetes.io/target-type"                           = "ip"
+        "alb.ingress.kubernetes.io/subnets"                               = join(",", var.subnet_ids)
+        "alb.ingress.kubernetes.io/backend-protocol"                      = "HTTP"
+        "alb.ingress.kubernetes.io/healthcheck-path"                      = "/healthz"
+        "alb.ingress.kubernetes.io/healthcheck-port"                      = "traffic-port"
+        "alb.ingress.kubernetes.io/healthcheck-protocol"                  = "HTTP"
+        "alb.ingress.kubernetes.io/healthcheck-interval-seconds"          = "30"
+        "alb.ingress.kubernetes.io/healthcheck-timeout-seconds"           = "10"
+        "alb.ingress.kubernetes.io/healthcheck-healthy-threshold-count"   = "2"
+        "alb.ingress.kubernetes.io/healthcheck-unhealthy-threshold-count" = "5"
+        "alb.ingress.kubernetes.io/group.name"                            = var.shared_alb_ingress_group_name
       },
       # Security group for IP restrictions (if provided)
       var.shared_alb_security_group_id != "" ? {
@@ -147,4 +153,18 @@ data "kubernetes_ingress_v1" "argocd_server" {
   }
 
   depends_on = [kubernetes_ingress_v1.argocd]
+}
+
+# Route53 record for ArgoCD
+module "route53" {
+  source = "../route53"
+
+  name         = var.route53_name
+  domain_name  = var.domain_name
+  alb_dns_name = var.alb_dns_name
+  alb_zone_id  = var.alb_zone_id
+
+  depends_on = [
+    kubernetes_ingress_v1.argocd
+  ]
 }

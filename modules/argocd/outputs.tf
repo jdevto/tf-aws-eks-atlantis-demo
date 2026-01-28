@@ -37,3 +37,8 @@ output "argocd_server_url" {
   )
   description = "ArgoCD server ALB URL (HTTP, insecure mode enabled, using host-based routing). If showing a command, Ingress status is not populated yet."
 }
+
+output "custom_domain" {
+  description = "Custom domain FQDN for ArgoCD"
+  value       = module.route53.custom_domain
+}

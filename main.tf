@@ -43,25 +43,13 @@ module "eks" {
   # Cluster authentication mode
   cluster_authentication_mode = var.cluster_authentication_mode
 
+  # Shared ALB configuration
+  enable_shared_alb             = var.enable_shared_alb
+  shared_alb_ingress_group_name = "platform"
+  shared_alb_allowed_ips        = var.shared_alb_allowed_ips
+  shared_alb_name               = local.cluster_name
+
   depends_on = [module.vpc]
-}
-
-# Shared ALB Module
-module "shared_alb" {
-  source = "./modules/shared-alb"
-
-  enable             = var.enable_shared_alb
-  name               = local.cluster_name
-  cluster_name       = module.eks.cluster_name
-  vpc_id             = module.vpc.vpc_id
-  ingress_group_name = "platform"
-  allowed_ips        = var.shared_alb_allowed_ips
-  tags               = local.common_tags
-
-  depends_on = [
-    module.vpc,
-    module.eks
-  ]
 }
 
 # Landing Page Module
@@ -71,11 +59,15 @@ module "landing_page" {
   count = var.enable_shared_alb ? 1 : 0
 
   subnet_ids                    = module.vpc.public_subnet_ids
-  shared_alb_ingress_group_name = module.shared_alb.ingress_group_name
-  shared_alb_security_group_id  = module.shared_alb.security_group_id
+  shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
+  shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
   enable_https                  = var.enable_https
   certificate_arn               = var.enable_https ? var.certificate_arn : ""
   ssl_redirect                  = var.enable_https
+  domain_name                   = var.domain_name
+  alb_dns_name                  = module.eks.shared_alb_dns_name
+  alb_zone_id                   = module.eks.shared_alb_zone_id
+  route53_name                  = "platform"
 
   # Services to display on landing page
   services = [
@@ -88,64 +80,10 @@ module "landing_page" {
       name        = "Atlantis"
       url         = var.enable_https ? "https://atlantis.${var.domain_name}" : "http://atlantis.${var.domain_name}"
       description = "Terraform automation via pull requests. Review and apply infrastructure changes safely through your Git workflow."
-    },
-    {
-      name        = "Bitwarden Reader"
-      url         = var.enable_https ? "https://reader.${var.domain_name}" : "http://reader.${var.domain_name}"
-      description = "Demo web interface to view secrets synced from Bitwarden Secrets Manager to Kubernetes."
     }
   ]
 
   depends_on = [module.eks]
-}
-
-module "route53_platform" {
-  source = "./modules/route53"
-
-  count = var.enable_shared_alb ? 1 : 0
-
-  name         = "platform" # Creates: platform.example.com
-  domain_name  = var.domain_name
-  alb_dns_name = module.shared_alb.dns_name
-  alb_zone_id  = module.shared_alb.zone_id
-
-  depends_on = [
-    module.eks,
-    module.landing_page,
-  ]
-}
-
-module "route53_atlantis" {
-  source = "./modules/route53"
-
-  count = var.enable_shared_alb ? 1 : 0
-
-  name         = "atlantis" # Creates: atlantis.dev.geonet.cloud
-  domain_name  = var.domain_name
-  alb_dns_name = module.shared_alb.dns_name
-  alb_zone_id  = module.shared_alb.zone_id
-
-  depends_on = [
-    module.eks,
-    module.route53_platform,
-  ]
-}
-
-module "route53_argocd" {
-  source = "./modules/route53"
-
-  count = var.enable_shared_alb ? 1 : 0
-
-  name         = "argocd" # Creates: argocd.dev.geonet.cloud
-  domain_name  = var.domain_name
-  alb_dns_name = module.shared_alb.dns_name
-  alb_zone_id  = module.shared_alb.zone_id
-
-  depends_on = [
-    module.eks,
-    module.route53_platform,
-    module.route53_atlantis,
-  ]
 }
 
 # ArgoCD Module
@@ -158,14 +96,15 @@ module "argocd" {
   enable_https                  = var.enable_https
   certificate_arn               = var.certificate_arn
   ssl_redirect                  = var.enable_https
-  shared_alb_ingress_group_name = module.shared_alb.ingress_group_name
-  shared_alb_security_group_id  = module.shared_alb.security_group_id
+  shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
+  shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
   domain_name                   = var.domain_name
+  alb_dns_name                  = module.eks.shared_alb_dns_name
+  alb_zone_id                   = module.eks.shared_alb_zone_id
+  route53_name                  = "argocd"
 
   depends_on = [
-    module.eks,
-    module.landing_page,
-    module.route53_argocd,
+    module.eks
   ]
 }
 
@@ -187,36 +126,12 @@ module "bitwarden" {
   cluster_ca_data  = module.eks.cluster_ca_data
   cluster_name     = module.eks.cluster_name
   argocd_namespace = module.argocd.argocd_namespace
+  secrets          = var.bitwarden_secrets
 
   tags = local.common_tags
 
   depends_on = [
-    module.vpc,
-    module.eks,
-    module.argocd
-  ]
-}
-
-# Bitwarden Secret Sync Modules
-# Create a module instance for each secret in bitwarden_secrets map
-module "bitwarden_secrets" {
-  source   = "./modules/bitwarden-secret"
-  for_each = var.bitwarden_secrets
-
-  name            = each.key
-  namespace       = module.bitwarden.secrets_namespace
-  organization_id = var.bitwarden_organization_id
-  secret_id       = each.value
-
-  access_token_secret_name = module.bitwarden.auth_secret_name
-  access_token_secret_key  = "token"
-
-  tags = local.common_tags
-
-  depends_on = [
-    module.vpc,
-    module.eks,
-    module.bitwarden
+    module.eks
   ]
 }
 
@@ -251,15 +166,16 @@ module "atlantis" {
   github_webhook_secret_name         = "dev-github-webhook-secret"
 
   state_bucket_name             = module.s3-backend.state_bucket_name
-  shared_alb_ingress_group_name = module.shared_alb.ingress_group_name
-  shared_alb_security_group_id  = module.shared_alb.security_group_id
+  shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
+  shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
   argocd_namespace              = "argocd" # Must match the namespace where ArgoCD is installed
+  alb_dns_name                  = module.eks.shared_alb_dns_name
+  alb_zone_id                   = module.eks.shared_alb_zone_id
+  route53_name                  = "atlantis"
 
   depends_on = [
     module.argocd,
-    module.bitwarden,
-    module.bitwarden_secrets,
-    module.route53_atlantis
+    module.bitwarden
   ]
 }
 

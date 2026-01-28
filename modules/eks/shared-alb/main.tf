@@ -127,3 +127,67 @@ resource "aws_security_group_rule" "shared_alb_egress" {
   security_group_id = aws_security_group.shared_alb[0].id
   description       = "Allow all outbound traffic"
 }
+
+# =============================================================================
+# Allow ALB to reach EKS pods (required for target-type=ip)
+# =============================================================================
+# When using target-type=ip, the ALB needs to reach pod IPs directly
+# This requires the cluster/node security group to allow traffic from the ALB
+
+# Get the cluster security group ID
+data "aws_eks_cluster" "this" {
+  count = var.enable ? 1 : 0
+  name  = var.cluster_name
+}
+
+# Allow ALB security group to reach pods on HTTP (port 80)
+resource "aws_security_group_rule" "cluster_allow_alb_http" {
+  count = var.enable && length(var.allowed_ips) > 0 ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 80
+  to_port                  = 80
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.shared_alb[0].id
+  security_group_id        = data.aws_eks_cluster.this[0].vpc_config[0].cluster_security_group_id
+  description              = "Allow ALB to reach pods on port 80 for health checks and traffic"
+}
+
+# Allow ALB security group to reach pods on HTTPS (port 443)
+resource "aws_security_group_rule" "cluster_allow_alb_https" {
+  count = var.enable && length(var.allowed_ips) > 0 ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.shared_alb[0].id
+  security_group_id        = data.aws_eks_cluster.this[0].vpc_config[0].cluster_security_group_id
+  description              = "Allow ALB to reach pods on port 443 for HTTPS traffic"
+}
+
+# Allow ALB security group to reach pods on port 8080 (used by ArgoCD and other services)
+resource "aws_security_group_rule" "cluster_allow_alb_8080" {
+  count = var.enable && length(var.allowed_ips) > 0 ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 8080
+  to_port                  = 8080
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.shared_alb[0].id
+  security_group_id        = data.aws_eks_cluster.this[0].vpc_config[0].cluster_security_group_id
+  description              = "Allow ALB to reach pods on port 8080 (ArgoCD and other services)"
+}
+
+# Allow ALB security group to reach pods on port 4141 (used by Atlantis)
+resource "aws_security_group_rule" "cluster_allow_alb_4141" {
+  count = var.enable && length(var.allowed_ips) > 0 ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 4141
+  to_port                  = 4141
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.shared_alb[0].id
+  security_group_id        = data.aws_eks_cluster.this[0].vpc_config[0].cluster_security_group_id
+  description              = "Allow ALB to reach pods on port 4141 (Atlantis)"
+}

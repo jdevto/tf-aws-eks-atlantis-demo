@@ -161,3 +161,30 @@ resource "kubectl_manifest" "bitwarden_application" {
     kubernetes_namespace.operator[0]
   ]
 }
+
+# =============================================================================
+# Bitwarden Secret Sync
+# =============================================================================
+# Create BitwardenSecret CRDs for each secret in the secrets map
+# These will sync secrets from Bitwarden Secrets Manager to Kubernetes
+
+module "secrets" {
+  source = "./secrets"
+  # Check if auth_token secret exists (instead of checking sensitive var.access_token)
+  for_each = var.enable && length(var.secrets) > 0 && length(kubernetes_secret.auth_token) > 0 ? var.secrets : {}
+
+  name            = each.key
+  namespace       = kubernetes_namespace.secrets[0].metadata[0].name
+  organization_id = var.organization_id
+  secret_id       = each.value
+
+  access_token_secret_name = kubernetes_secret.auth_token[0].metadata[0].name
+  access_token_secret_key  = "token"
+
+  tags = var.tags
+
+  depends_on = [
+    kubernetes_namespace.secrets,
+    kubernetes_secret.auth_token
+  ]
+}

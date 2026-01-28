@@ -4,4 +4,4 @@ Atlantis on EKS with Terraform automation demo
 
 terraform apply -target=module.eks
 
-terraform apply -target=module.shared_alb
+terraform apply -target=module.landing_page

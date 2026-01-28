@@ -48,11 +48,29 @@ variable "shared_alb_ingress_group_name" {
 
 variable "domain_name" {
   type        = string
-  description = "Domain name for ArgoCD (e.g., dev.geonet.cloud). Used to construct the full URL."
+  description = "Domain name for ArgoCD (e.g., example.com). Used to construct the full URL."
 }
 
 variable "shared_alb_security_group_id" {
   type        = string
   default     = ""
   description = "Security group ID for shared ALB with IP restrictions. Empty if IP restrictions are not configured."
+}
+
+variable "alb_dns_name" {
+  type        = string
+  description = "DNS name of the Application Load Balancer"
+  default     = ""
+}
+
+variable "alb_zone_id" {
+  type        = string
+  description = "Zone ID of the Application Load Balancer"
+  default     = ""
+}
+
+variable "route53_name" {
+  type        = string
+  default     = "argocd"
+  description = "Name for the Route53 record (e.g., 'argocd' creates argocd.example.com)"
 }

@@ -89,3 +89,9 @@ variable "argocd_namespace" {
   type        = string
   default     = "argocd"
 }
+
+variable "secrets" {
+  description = "Map of secret names to Bitwarden secret IDs. Each entry will create a BitwardenSecret CRD to sync the secret from Bitwarden to Kubernetes."
+  type        = map(string)
+  default     = {}
+}
