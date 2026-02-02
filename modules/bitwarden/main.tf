@@ -1,7 +1,5 @@
 # Kubernetes namespace for operator
 resource "kubernetes_namespace" "operator" {
-  count = var.enable ? 1 : 0
-
   metadata {
     name = var.operator_namespace
     labels = merge(
@@ -16,8 +14,6 @@ resource "kubernetes_namespace" "operator" {
 
 # Kubernetes namespace for secrets
 resource "kubernetes_namespace" "secrets" {
-  count = var.enable ? 1 : 0
-
   metadata {
     name = var.namespace
     labels = merge(
@@ -32,11 +28,11 @@ resource "kubernetes_namespace" "secrets" {
 
 # Kubernetes secret for Bitwarden access token
 resource "kubernetes_secret" "auth_token" {
-  count = var.enable && var.access_token != null ? 1 : 0
+  count = var.access_token != null ? 1 : 0
 
   metadata {
     name      = "bitwarden-auth-token"
-    namespace = kubernetes_namespace.secrets[0].metadata[0].name
+    namespace = kubernetes_namespace.secrets.metadata[0].name
     labels = merge(
       var.tags,
       {
@@ -56,8 +52,6 @@ resource "kubernetes_secret" "auth_token" {
 
 # Register Helm repository for Bitwarden Secrets Manager Operator in ArgoCD
 resource "kubectl_manifest" "bitwarden_helm_repo" {
-  count = var.enable ? 1 : 0
-
   yaml_body = yamlencode({
     apiVersion = "v1"
     kind       = "Secret"
@@ -79,8 +73,6 @@ resource "kubectl_manifest" "bitwarden_helm_repo" {
 
 # ArgoCD Application for Bitwarden Secrets Manager Operator
 resource "kubectl_manifest" "bitwarden_application" {
-  count = var.enable ? 1 : 0
-
   yaml_body = yamlencode({
     apiVersion = "argoproj.io/v1alpha1"
     kind       = "Application"
@@ -133,7 +125,7 @@ resource "kubectl_manifest" "bitwarden_application" {
 
       destination = {
         server    = "https://kubernetes.default.svc"
-        namespace = kubernetes_namespace.operator[0].metadata[0].name
+        namespace = kubernetes_namespace.operator.metadata[0].name
       }
 
       syncPolicy = {
@@ -157,8 +149,8 @@ resource "kubectl_manifest" "bitwarden_application" {
   wait = true
 
   depends_on = [
-    kubectl_manifest.bitwarden_helm_repo[0],
-    kubernetes_namespace.operator[0]
+    kubectl_manifest.bitwarden_helm_repo,
+    kubernetes_namespace.operator
   ]
 }
 
@@ -171,10 +163,10 @@ resource "kubectl_manifest" "bitwarden_application" {
 module "secrets" {
   source = "./secrets"
   # Check if auth_token secret exists (instead of checking sensitive var.access_token)
-  for_each = var.enable && length(var.secrets) > 0 && length(kubernetes_secret.auth_token) > 0 ? var.secrets : {}
+  for_each = length(var.secrets) > 0 && length(kubernetes_secret.auth_token) > 0 ? var.secrets : {}
 
   name            = each.key
-  namespace       = kubernetes_namespace.secrets[0].metadata[0].name
+  namespace       = kubernetes_namespace.secrets.metadata[0].name
   organization_id = var.organization_id
   secret_id       = each.value
 
@@ -185,6 +177,7 @@ module "secrets" {
 
   depends_on = [
     kubernetes_namespace.secrets,
-    kubernetes_secret.auth_token
+    kubernetes_secret.auth_token,
+    kubectl_manifest.bitwarden_application
   ]
 }

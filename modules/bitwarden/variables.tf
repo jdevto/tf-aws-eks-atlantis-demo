@@ -1,9 +1,3 @@
-variable "enable" {
-  description = "Enable/disable the Bitwarden Secrets Manager module"
-  type        = bool
-  default     = true
-}
-
 variable "namespace" {
   description = "Namespace for Bitwarden secrets"
   type        = string

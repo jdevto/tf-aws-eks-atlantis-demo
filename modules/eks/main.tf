@@ -48,10 +48,12 @@ module "eks" {
 module "shared_alb" {
   source = "./shared-alb"
 
-  enable             = var.enable_shared_alb
+  count = var.enable_shared_alb ? 1 : 0
+
   name               = var.shared_alb_name != "" ? var.shared_alb_name : var.cluster_name
   cluster_name       = module.eks.cluster_name
   vpc_id             = var.vpc_id
+  subnet_ids         = var.public_subnet_ids # ALB needs public subnets, one per AZ
   ingress_group_name = var.shared_alb_ingress_group_name
   allowed_ips        = var.shared_alb_allowed_ips
   tags               = var.tags

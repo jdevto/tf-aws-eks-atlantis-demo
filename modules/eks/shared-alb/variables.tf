@@ -1,9 +1,3 @@
-variable "enable" {
-  type        = bool
-  default     = false
-  description = "Enable shared ALB functionality"
-}
-
 variable "name" {
   type        = string
   description = "Name prefix for resources (e.g., cluster name)"
@@ -35,4 +29,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
   description = "Tags to apply to resources"
+}
+
+variable "subnet_ids" {
+  type        = list(string)
+  description = "Public subnet IDs for ALB"
 }

@@ -217,14 +217,23 @@ resource "kubernetes_ingress_v1" "landing_page" {
   }
 }
 
+# Get ALB details
+data "aws_lb" "shared_alb_details" {
+  count = var.alb_arn != "" ? 1 : 0
+
+  arn = var.alb_arn
+}
+
 # Route53 record for landing page
 module "route53" {
   source = "../route53"
 
+  count = var.alb_arn != "" ? 1 : 0
+
   name         = var.route53_name
   domain_name  = var.domain_name
-  alb_dns_name = var.alb_dns_name
-  alb_zone_id  = var.alb_zone_id
+  alb_dns_name = data.aws_lb.shared_alb_details[0].dns_name
+  alb_zone_id  = data.aws_lb.shared_alb_details[0].zone_id
 
   depends_on = [
     kubernetes_ingress_v1.landing_page

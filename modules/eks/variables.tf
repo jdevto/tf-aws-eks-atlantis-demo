@@ -11,6 +11,12 @@ variable "subnet_ids" {
   type        = list(string)
 }
 
+variable "public_subnet_ids" {
+  description = "Public subnet IDs (used for ALB - must be in different availability zones)"
+  type        = list(string)
+  default     = []
+}
+
 variable "node_subnet_ids" {
   description = "Subnet IDs for EKS node groups (should be private subnets only for security)"
   type        = list(string)

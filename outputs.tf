@@ -13,20 +13,20 @@
 #   value       = module.argocd.argocd_server_url
 # }
 
-output "argocd_username" {
-  description = "ArgoCD username"
-  value       = module.argocd.argocd_username
-}
+# output "argocd_username" {
+#   description = "ArgoCD username"
+#   value       = module.argocd.argocd_username
+# }
 
 output "argocd_password" {
   description = "ArgoCD password"
   value       = module.argocd.argocd_password
 }
 
-# # output "argocd_custom_domain" {
-# #   description = "ArgoCD custom domain"
-# #   value       = module.route53-argocd.custom_domain
-# # }
+# # # output "argocd_custom_domain" {
+# # #   description = "ArgoCD custom domain"
+# # #   value       = module.route53-argocd.custom_domain
+# # # }
 
 output "platform_url" {
   description = "Platform URL with protocol (http:// or https://)"
@@ -39,3 +39,7 @@ output "platform_url" {
 #   description = "Shared ALB DNS name"
 #   value       = module.eks.shared_alb_dns_name
 # }
+
+output "shared_alb_arn" {
+  value = module.eks.shared_alb_arn
+}

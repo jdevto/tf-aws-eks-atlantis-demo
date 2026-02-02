@@ -45,7 +45,8 @@ module "eks" {
 
   # Shared ALB configuration
   enable_shared_alb             = var.enable_shared_alb
-  shared_alb_ingress_group_name = "platform"
+  public_subnet_ids             = module.vpc.public_subnet_ids # Pass public subnets for ALB
+  shared_alb_ingress_group_name = local.shared_alb_ingress_group_name
   shared_alb_allowed_ips        = var.shared_alb_allowed_ips
   shared_alb_name               = local.cluster_name
 
@@ -59,14 +60,13 @@ module "landing_page" {
   count = var.enable_shared_alb ? 1 : 0
 
   subnet_ids                    = module.vpc.public_subnet_ids
-  shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
+  shared_alb_ingress_group_name = local.shared_alb_ingress_group_name
   shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
   enable_https                  = var.enable_https
   certificate_arn               = var.enable_https ? var.certificate_arn : ""
   ssl_redirect                  = var.enable_https
   domain_name                   = var.domain_name
-  alb_dns_name                  = module.eks.shared_alb_dns_name
-  alb_zone_id                   = module.eks.shared_alb_zone_id
+  alb_arn                       = module.eks.shared_alb_arn
   route53_name                  = "platform"
 
   # Services to display on landing page
@@ -96,11 +96,10 @@ module "argocd" {
   enable_https                  = var.enable_https
   certificate_arn               = var.certificate_arn
   ssl_redirect                  = var.enable_https
-  shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
+  shared_alb_ingress_group_name = local.shared_alb_ingress_group_name
   shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
   domain_name                   = var.domain_name
-  alb_dns_name                  = module.eks.shared_alb_dns_name
-  alb_zone_id                   = module.eks.shared_alb_zone_id
+  alb_arn                       = module.eks.shared_alb_arn
   route53_name                  = "argocd"
 
   depends_on = [
@@ -112,7 +111,8 @@ module "argocd" {
 module "bitwarden" {
   source = "./modules/bitwarden"
 
-  enable          = var.bitwarden_enable
+  count = var.bitwarden_enable ? 1 : 0
+
   organization_id = var.bitwarden_organization_id
   access_token    = var.bitwarden_access_token
 
@@ -139,6 +139,8 @@ module "bitwarden" {
 module "atlantis" {
   source = "./modules/atlantis"
 
+  count = var.bitwarden_enable ? 1 : 0
+
   aws_region      = var.region
   cluster_name    = module.eks.cluster_name
   subnet_ids      = module.vpc.public_subnet_ids
@@ -149,9 +151,9 @@ module "atlantis" {
   github_owner    = var.github_owner
 
   # GitHub credentials from Bitwarden-synced Kubernetes secrets
-  bitwarden_secrets_namespace      = module.bitwarden.secrets_namespace
+  bitwarden_secrets_namespace      = module.bitwarden[0].secrets_namespace
   bitwarden_organization_id        = var.bitwarden_organization_id
-  bitwarden_auth_token_secret_name = module.bitwarden.auth_secret_name
+  bitwarden_auth_token_secret_name = module.bitwarden[0].auth_secret_name
   bitwarden_auth_token_secret_key  = "token"
 
   # Bitwarden secret IDs for GitHub credentials (used to sync secrets to atlantis namespace)
@@ -166,16 +168,15 @@ module "atlantis" {
   github_webhook_secret_name         = "dev-github-webhook-secret"
 
   state_bucket_name             = module.s3-backend.state_bucket_name
-  shared_alb_ingress_group_name = module.eks.shared_alb_ingress_group_name
+  shared_alb_ingress_group_name = local.shared_alb_ingress_group_name
   shared_alb_security_group_id  = module.eks.shared_alb_security_group_id
   argocd_namespace              = "argocd" # Must match the namespace where ArgoCD is installed
-  alb_dns_name                  = module.eks.shared_alb_dns_name
-  alb_zone_id                   = module.eks.shared_alb_zone_id
+  alb_arn                       = module.eks.shared_alb_arn
   route53_name                  = "atlantis"
 
   depends_on = [
     module.argocd,
-    module.bitwarden
+    module.bitwarden[0]
   ]
 }
 
@@ -191,14 +192,14 @@ module "github_terraform_aws" {
   region                = var.region
 }
 
-# # GitHub Terraform GitHub Module (commented out - not currently used)
-# module "github_terraform_github" {
-#   source = "./modules/github-terraform-github"
-#
-#   repository_name       = "atlantis-terraform-github"
-#   github_owner          = var.github_owner
-#   github_webhook_secret = var.github_webhook_secret
-#   atlantis_url          = var.enable_https ? "https://atlantis.${var.domain_name}" : "http://atlantis.${var.domain_name}"
-#   state_bucket_name     = module.s3-backend.state_bucket_name
-#   region                = var.region
-# }
+# # # GitHub Terraform GitHub Module (commented out - not currently used)
+# # module "github_terraform_github" {
+# #   source = "./modules/github-terraform-github"
+# #
+# #   repository_name       = "atlantis-terraform-github"
+# #   github_owner          = var.github_owner
+# #   github_webhook_secret = var.github_webhook_secret
+# #   atlantis_url          = var.enable_https ? "https://atlantis.${var.domain_name}" : "http://atlantis.${var.domain_name}"
+# #   state_bucket_name     = module.s3-backend.state_bucket_name
+# #   region                = var.region
+# # }

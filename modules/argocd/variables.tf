@@ -57,17 +57,12 @@ variable "shared_alb_security_group_id" {
   description = "Security group ID for shared ALB with IP restrictions. Empty if IP restrictions are not configured."
 }
 
-variable "alb_dns_name" {
+variable "alb_arn" {
   type        = string
-  description = "DNS name of the Application Load Balancer"
+  description = "ARN of the Application Load Balancer"
   default     = ""
 }
 
-variable "alb_zone_id" {
-  type        = string
-  description = "Zone ID of the Application Load Balancer"
-  default     = ""
-}
 
 variable "route53_name" {
   type        = string
