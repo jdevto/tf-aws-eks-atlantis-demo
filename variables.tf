@@ -11,14 +11,39 @@ variable "cluster_name" {
 
 variable "cluster_version" {
   type    = string
-  default = "1.34"
+  default = "1.35"
 }
 
-variable "enable_ebs_csi_driver" {
-  description = "Whether to install AWS EBS CSI Driver"
+variable "access_entries" {
+  description = "Map of access entries to add to the cluster"
+  type = map(object({
+    kubernetes_groups = optional(list(string))
+    principal_arn     = string
+    type              = optional(string, "STANDARD")
+    user_name         = optional(string)
+    tags              = optional(map(string), {})
+    policy_associations = optional(map(object({
+      policy_arn = string
+      access_scope = object({
+        namespaces = optional(list(string))
+        type       = string
+      })
+    })), {})
+  }))
+  default = {}
+}
+
+variable "enable_aws_load_balancer_controller" {
+  description = "Whether to create IAM role for AWS Load Balancer Controller (IRSA)"
   type        = bool
   default     = true
 }
+
+# variable "enable_ebs_csi_driver" {
+#   description = "Whether to install AWS EBS CSI Driver"
+#   type        = bool
+#   default     = true
+# }
 
 variable "bitwarden_organization_id" {
   description = "Bitwarden organization ID"
@@ -146,37 +171,37 @@ variable "tags" {
   default     = {}
 }
 
-variable "enable_shared_alb" {
-  description = "Enable shared ALB functionality. When true, sets up shared ALB for multiple services to use."
-  type        = bool
-  default     = false
-}
+# variable "enable_shared_alb" {
+#   description = "Enable shared ALB functionality. When true, sets up shared ALB for multiple services to use."
+#   type        = bool
+#   default     = false
+# }
 
-variable "cluster_admin_arns" {
-  description = "List of IAM user/role ARNs to grant cluster admin access via EKS access entries"
-  type        = list(string)
-  default     = []
-}
+# variable "cluster_admin_arns" {
+#   description = "List of IAM user/role ARNs to grant cluster admin access via EKS access entries"
+#   type        = list(string)
+#   default     = []
+# }
 
-variable "shared_alb_allowed_ips" {
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
-  description = "List of CIDR blocks allowed to access the shared ALB. If empty, all IPs are allowed. Example: [\"1.2.3.4/32\", \"10.0.0.0/8\"]"
-}
+# variable "shared_alb_allowed_ips" {
+#   type        = list(string)
+#   default     = ["0.0.0.0/0"]
+#   description = "List of CIDR blocks allowed to access the shared ALB. If empty, all IPs are allowed. Example: [\"1.2.3.4/32\", \"10.0.0.0/8\"]"
+# }
 
-variable "enable_pod_identity_agent" {
-  description = "Whether to enable the EKS Pod Identity Agent addon"
-  type        = bool
-  default     = true
-}
+# variable "enable_pod_identity_agent" {
+#   description = "Whether to enable the EKS Pod Identity Agent addon"
+#   type        = bool
+#   default     = true
+# }
 
-variable "cluster_authentication_mode" {
-  description = "Authentication mode for the EKS cluster. Valid values: CONFIG_MAP, API, API_AND_CONFIG_MAP. Defaults to API_AND_CONFIG_MAP when capabilities are enabled, otherwise CONFIG_MAP."
-  type        = string
-  default     = "API_AND_CONFIG_MAP"
+# variable "cluster_authentication_mode" {
+#   description = "Authentication mode for the EKS cluster. Valid values: CONFIG_MAP, API, API_AND_CONFIG_MAP. Defaults to API_AND_CONFIG_MAP when capabilities are enabled, otherwise CONFIG_MAP."
+#   type        = string
+#   default     = "API_AND_CONFIG_MAP"
 
-  validation {
-    condition     = contains(["CONFIG_MAP", "API", "API_AND_CONFIG_MAP"], var.cluster_authentication_mode)
-    error_message = "cluster_authentication_mode must be one of: CONFIG_MAP, API, API_AND_CONFIG_MAP"
-  }
-}
+#   validation {
+#     condition     = contains(["CONFIG_MAP", "API", "API_AND_CONFIG_MAP"], var.cluster_authentication_mode)
+#     error_message = "cluster_authentication_mode must be one of: CONFIG_MAP, API, API_AND_CONFIG_MAP"
+#   }
+# }
