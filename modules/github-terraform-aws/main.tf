@@ -5,7 +5,7 @@
 resource "githubx_repository" "this" {
   name        = var.repository_name
   description = "Infrastructure as Code repository managed by Atlantis"
-  visibility  = "public"
+  visibility  = "private"
   auto_init   = true # Initialize with README to create default branch
 }
 

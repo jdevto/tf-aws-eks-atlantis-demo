@@ -5,5 +5,5 @@ output "iam_role_arn" {
 
 output "custom_domain" {
   description = "Custom domain FQDN for Atlantis"
-  value       = module.route53.custom_domain
+  value       = var.create_route53 ? module.route53[0].custom_domain : ""
 }

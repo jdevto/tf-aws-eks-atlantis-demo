@@ -40,5 +40,5 @@ output "argocd_server_url" {
 
 output "custom_domain" {
   description = "Custom domain FQDN for ArgoCD"
-  value       = module.route53.custom_domain
+  value       = var.create_route53 ? module.route53[0].custom_domain : ""
 }

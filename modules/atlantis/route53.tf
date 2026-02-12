@@ -2,6 +2,8 @@
 module "route53" {
   source = "../route53"
 
+  count = var.create_route53 ? 1 : 0
+
   name         = var.route53_name
   domain_name  = var.domain_name
   alb_dns_name = data.aws_lb.shared_alb_details[0].dns_name

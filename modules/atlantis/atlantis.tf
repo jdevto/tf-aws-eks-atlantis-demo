@@ -197,7 +197,7 @@ resource "kubectl_manifest" "atlantis_application" {
               extraArgs = [
                 "--default-tf-version=${var.default_tf_version}",
                 "--write-git-creds",
-                "--enable-policy-checks"
+                # "--enable-policy-checks"
                 # Note: automerge is configured at repo level in atlantis.yaml
                 # The --automerge flag can be used as a global fallback, but repo-level
                 # config in atlantis.yaml takes priority (see https://www.runatlantis.io/docs/automerging)

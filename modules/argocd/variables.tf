@@ -69,3 +69,9 @@ variable "route53_name" {
   default     = "argocd"
   description = "Name for the Route53 record (e.g., 'argocd' creates argocd.example.com)"
 }
+
+variable "create_route53" {
+  type        = bool
+  default     = true
+  description = "Create Route53 alias record for the ALB. Use a static value so count is known at plan time. If alb_arn is empty at apply time, a precondition will fail with instructions to run -target=module.shared_alb first."
+}
