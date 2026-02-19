@@ -32,7 +32,7 @@ terraform apply -target=module.eks --auto-approve
 
 ## Troubleshooting
 
-### Cannot curl <https://argocd.dev.geonet.cloud> (or other subdomains)
+### Cannot curl <https://argocd.domain.com> (or other subdomains)
 
 DNS resolves but HTTPS times out or is refused because the **shared ALB security group restricts access by IP**.
 
